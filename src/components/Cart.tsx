@@ -1,12 +1,35 @@
-import { memo } from 'react';
+import { memo, useState, useEffect } from 'react';
 import type { Ride } from '../data/rides';
 import { Trash2, Printer, ShoppingCart, Banknote, Smartphone } from 'lucide-react';
-
 import { IMAGE_URL } from '../api/config';
 
 interface CartItem extends Ride {
     quantity: number;
 }
+
+const CartImage = ({ ride }: { ride: Ride }) => {
+    const [imageSrc, setImageSrc] = useState<string | null>(null);
+
+    useEffect(() => {
+        // Try local path first
+        setImageSrc(`/rides/${ride.image}`);
+    }, [ride.image]);
+
+    const handleImageError = () => {
+        if (imageSrc !== `${IMAGE_URL}/${ride.image}?ngrok-skip-browser-warning=true`) {
+            setImageSrc(`${IMAGE_URL}/${ride.image}?ngrok-skip-browser-warning=true`);
+        }
+    };
+
+    return (
+        <img
+            src={imageSrc || ''}
+            alt=""
+            onError={handleImageError}
+            className="w-full h-full object-cover"
+        />
+    );
+};
 
 interface CartProps {
     items: CartItem[];
@@ -62,11 +85,7 @@ export const Cart = memo(function Cart({
                         <div key={item._id || item.id} className="group flex gap-3 items-start bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-200">
                             <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 shrink-0 relative">
                                 {item.image && (
-                                    <img 
-                                        src={`${IMAGE_URL}/${item.image}?ngrok-skip-browser-warning=1`} 
-                                        alt="" 
-                                        className="w-full h-full object-cover" 
-                                    />
+                                    <CartImage ride={item} />
                                 )}
                             </div>
                             <div className="flex-1 min-w-0 py-1">
