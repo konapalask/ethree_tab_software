@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState, useEffect } from 'react';
 import type { Ride } from '../data/rides';
 import { Plus } from 'lucide-react';
 import { IMAGE_URL } from '../api/config';
@@ -9,15 +9,34 @@ interface RideCardProps {
 }
 
 export const RideCard = memo(function RideCard({ ride, onAdd }: RideCardProps) {
+    const [imageSrc, setImageSrc] = useState<string | null>(null);
+
+    useEffect(() => {
+        // Stagger the loading of ride images to avoid flooding the ngrok tunnel connection limit
+        // Random delay between 100ms and 2000ms
+        const delay = Math.floor(Math.random() * 1900) + 100;
+        const timer = setTimeout(() => {
+            setImageSrc(`${IMAGE_URL}/${ride.image}`);
+        }, delay);
+
+        return () => clearTimeout(timer);
+    }, [ride.image]);
+
     return (
         <div className="group relative bg-white rounded-xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-slate-100 overflow-hidden flex flex-col h-full">
             <div className="h-28 overflow-hidden relative">
-                <img
-                    src={`${IMAGE_URL}/${ride.image}`}
-                    alt={ride.name}
-                    loading="lazy"
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                />
+                {imageSrc ? (
+                    <img
+                        src={imageSrc}
+                        alt={ride.name}
+                        loading="lazy"
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    />
+                ) : (
+                    <div className="w-full h-full bg-slate-100 animate-pulse flex items-center justify-center">
+                        <div className="w-8 h-8 bg-slate-200 rounded-full" />
+                    </div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent opacity-80" />
 
                 <div className="absolute bottom-2 left-3 right-3 flex items-end justify-between">
