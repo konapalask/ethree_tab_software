@@ -705,11 +705,20 @@ export default function POS() {
                                 )}
                                 
                                 {/* Developer Credit */}
-                                <div className="hidden xl:flex flex-col border-l border-white/10 pl-4 ml-2">
-                                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] leading-none mb-1 text-slate-500">Architecture</span>
-                                    <span className="text-[9px] font-black text-white/90 tracking-widest uppercase">
-                                        Designed & Developed by <span className="text-amber-400">Stackvil Technologies</span>
-                                    </span>
+                                <div className="hidden xl:flex items-center gap-3 border-l border-white/10 pl-4 ml-2">
+                                    <div className="w-10 h-10 bg-white/5 rounded-xl border border-white/10 p-1 flex items-center justify-center overflow-hidden">
+                                        <img 
+                                            src="/stackvil_logo.png" 
+                                            alt="Stackvil" 
+                                            className="w-full h-full object-contain brightness-125"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] leading-none mb-1">Architecture</span>
+                                        <span className="text-[9px] font-black text-white/90 tracking-widest uppercase">
+                                            Designed & Developed by <span className="text-amber-400 font-black">Stackvil Technologies</span>
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
