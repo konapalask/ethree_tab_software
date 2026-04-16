@@ -248,7 +248,7 @@ export default function POS() {
                 } catch (err) {
                     console.warn('Polling error (expected if not yet synced):', err);
                 }
-            }, 3000); // Poll every 3 seconds
+            }, 1000); // Poll every 1 second for hyper-speed detection
         }
 
         return () => {
