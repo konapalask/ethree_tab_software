@@ -169,16 +169,27 @@ class BluetoothPrinterService {
             // 4. Items
             for (const item of data.items) {
                 const name = item.name.toUpperCase().substring(0, 18);
+                const isCombo = name.includes('COMBO');
+                
                 const line = `${name.padEnd(20)} x${item.quantity}\n`;
                 await this.write(encoder.encode(line));
-                await this.write(encoder.encode(`Price: INR ${item.price * item.quantity}\n`));
+                
+                // Hide price for individual combo coupons
+                if (!isCombo) {
+                    await this.write(encoder.encode(`Price: INR ${item.price * item.quantity}\n`));
+                }
             }
 
             // 5. Total
+            // Only show total if NOT a combo coupon (Combos are usually pre-paid/fixed)
+            const containsCombo = data.items.some(i => i.name.toUpperCase().includes('COMBO'));
+            
             await this.write(encoder.encode("--------------------------------\n"));
-            await this.write(this.COMMANDS.BOLD_ON);
-            await this.write(encoder.encode(`TOTAL PAYABLE: INR ${data.total}\n`));
-            await this.write(this.COMMANDS.BOLD_OFF);
+            if (!containsCombo) {
+                await this.write(this.COMMANDS.BOLD_ON);
+                await this.write(encoder.encode(`TOTAL PAYABLE: INR ${data.total}\n`));
+                await this.write(this.COMMANDS.BOLD_OFF);
+            }
             
             // 6. Prominent Payment Mode (HIGHLIGHTED)
             if (data.paymentMode) {
