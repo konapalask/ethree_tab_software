@@ -8,6 +8,13 @@ export default function PaymentSuccess() {
     const navigate = useNavigate();
 
     useEffect(() => {
+        // 1. History Trap - Block Back Button
+        window.history.pushState(null, '', window.location.href);
+        const handleBack = () => {
+            window.history.pushState(null, '', window.location.href);
+        };
+        window.addEventListener('popstate', handleBack);
+
         const handleSuccess = async () => {
             const pendingData = localStorage.getItem('pending_upi_transaction');
             if (pendingData) {
@@ -31,6 +38,8 @@ export default function PaymentSuccess() {
         };
 
         handleSuccess();
+
+        return () => window.removeEventListener('popstate', handleBack);
     }, []);
 
     const handlePrint = () => {
