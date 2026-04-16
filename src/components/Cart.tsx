@@ -57,7 +57,7 @@ export const Cart = memo(function Cart({
 
     return (
         <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 flex flex-col h-full sticky top-24 overflow-hidden ring-1 ring-slate-900/5">
-            <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center backdrop-blur-sm">
+            <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center backdrop-blur-sm">
                 <div className="flex items-center gap-3 text-slate-800">
                     <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-100/50">
                         <ShoppingCart className="w-5 h-5 text-slate-700" />
@@ -82,8 +82,8 @@ export const Cart = memo(function Cart({
                     </div>
                 ) : (
                     items.map((item) => (
-                        <div key={item._id || item.id} className="group flex gap-3 items-start bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-200">
-                            <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 shrink-0 relative">
+                        <div key={item._id || item.id} className="group flex gap-2 items-start bg-white p-2 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-200">
+                            <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-100 shrink-0 relative">
                                 {item.image && (
                                     <CartImage ride={item} />
                                 )}
@@ -113,28 +113,28 @@ export const Cart = memo(function Cart({
                 )}
             </div>
 
-            <div className="p-5 bg-white border-t border-slate-100 space-y-4 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-10">
+            <div className="p-3 bg-white border-t border-slate-100 space-y-3 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-10">
                 {items.length > 0 && (
-                    <div className="space-y-4 pb-4 border-b border-slate-200">
+                    <div className="space-y-3 pb-3 border-b border-slate-200">
                         {/* Mobile & Loyalty */}
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer Mobile (Optional)</label>
                             <input
                                 type="tel"
                                 placeholder="Enter 10-digit number"
-                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-bold"
+                                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-bold"
                                 value={mobileNumber}
                                 onChange={(e) => onMobileNumberChange(e.target.value.replace(/\D/g, '').slice(0, 10))}
                             />
                         </div>
 
                         {/* Payment Mode */}
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Payment Mode Selection</label>
                             <div className="grid grid-cols-2 gap-2">
                                 <button
                                     onClick={() => onPaymentModeChange('cash')}
-                                    className={`group flex flex-col items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 transition-all duration-300 relative overflow-hidden ${paymentMode === 'cash'
+                                    className={`group flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl border-2 transition-all duration-300 relative overflow-hidden ${paymentMode === 'cash'
                                         ? 'border-emerald-500 bg-emerald-500/5 text-emerald-700 shadow-sm'
                                         : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200 hover:bg-slate-50'
                                         }`}
@@ -147,7 +147,7 @@ export const Cart = memo(function Cart({
                                 </button>
                                 <button
                                     onClick={() => onPaymentModeChange('upi')}
-                                    className={`group flex flex-col items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 transition-all duration-300 relative overflow-hidden ${paymentMode === 'upi'
+                                    className={`group flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl border-2 transition-all duration-300 relative overflow-hidden ${paymentMode === 'upi'
                                         ? 'border-indigo-600 bg-indigo-600/5 text-indigo-700 shadow-sm'
                                         : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200 hover:bg-slate-50'
                                         }`}
@@ -174,11 +174,11 @@ export const Cart = memo(function Cart({
                     </div>
                 </div>
 
-                <div className="bg-slate-900 rounded-xl p-3 text-white flex justify-between items-center shadow-xl relative overflow-hidden group">
+                <div className="bg-slate-900 rounded-xl p-2.5 text-white flex justify-between items-center shadow-xl relative overflow-hidden group">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-amber-400/10 rounded-full -mr-12 -mt-12 blur-2xl group-hover:bg-amber-400/20 transition-all duration-500" />
                     <div className="relative z-10">
-                        <div className="text-amber-400 text-[9px] font-black uppercase tracking-[0.2em] mb-0.5">Total Payable</div>
-                        <div className="text-3xl font-black tracking-tighter leading-none">₹{total}</div>
+                        <div className="text-amber-400 text-[8px] font-black uppercase tracking-[0.2em] mb-0.5">Total Payable</div>
+                        <div className="text-2xl font-black tracking-tighter leading-none">₹{total}</div>
                     </div>
                     <div className="relative z-10 text-right">
                         <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Instant Print</div>
