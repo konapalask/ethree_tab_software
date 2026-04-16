@@ -3,7 +3,8 @@ import axios from 'axios';
 // Override the standard local API_URL with the public cloud API for all Admin actions
 import { API_URL } from '../api/config';
 import { useNavigate } from 'react-router-dom';
-import { Download, LogOut, RefreshCw, Receipt, Search, Trash2, AlertTriangle, BarChart3, List, Users } from 'lucide-react';
+import { Download, LogOut, RefreshCw, Receipt, Search, Trash2, AlertTriangle, BarChart3, List, Users, Printer } from 'lucide-react';
+import { BluetoothPrinter } from '../api/BluetoothPrinter';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 interface User {
@@ -35,13 +36,72 @@ export default function AdminDashboard() {
     const [selectedUserSales, setSelectedUserSales] = useState<string | null>(null);
     const [view, setView] = useState<'transactions' | 'analytics' | 'users'>('transactions');
     const [ticketStats, setTicketStats] = useState({ total: 0, revenue: 0, scanned: 0, pending: 0 });
+    const [allRawTickets, setAllRawTickets] = useState<any[]>([]);
+
+    // Bluetooth Printer State
+    const [isBTConnecting, setIsBTConnecting] = useState(false);
+    const [btError, setBtError] = useState<string | null>(null);
+    const [btStatus, setBtStatus] = useState<'disconnected' | 'connected' | 'error' | 'paired_not_linked'>(() => {
+        const isPaired = localStorage.getItem('bt_printer_paired') === 'true';
+        return isPaired ? 'paired_not_linked' : 'disconnected';
+    });
+    const [isPrinting, setIsPrinting] = useState<string | null>(null);
     const navigate = useNavigate();
 
     useEffect(() => {
         fetchTickets();
         fetchUsers();
         fetchStats();
-    }, []);
+
+        // Auto-Resume Bluetooth on Mount
+        const autoResume = async () => {
+            const isPaired = localStorage.getItem('bt_printer_paired') === 'true';
+            const targetName = "PRINTER 001-6D49";
+
+            if (isPaired && !BluetoothPrinter.isConnected) {
+                try {
+                    const connected = await BluetoothPrinter.autoConnect(targetName);
+                    if (connected) {
+                        setBtStatus('connected');
+                    }
+                } catch (e) {
+                    console.log('Auto-resume failed');
+                }
+            }
+        };
+        autoResume();
+
+        const checkStatus = setInterval(() => {
+            if (btStatus === 'connected' && !BluetoothPrinter.isConnected) {
+                setBtStatus('paired_not_linked');
+            }
+        }, 5000);
+        return () => clearInterval(checkStatus);
+    }, [btStatus]);
+
+    const connectBluetooth = async () => {
+        setIsBTConnecting(true);
+        try {
+            const printerName = await BluetoothPrinter.connect();
+            setBtStatus('connected');
+            setBtError(null);
+            localStorage.setItem('bt_printer_paired', 'true');
+            localStorage.setItem('bt_printer_name', printerName);
+            alert(`Printer "${printerName}" Ready!`);
+        } catch (error: any) {
+            setBtStatus('error');
+            setBtError(error.name || 'Unknown Error');
+            alert(`Bluetooth pairing failed: ${error.message || 'Unknown error'}`);
+        } finally {
+            setIsBTConnecting(false);
+        }
+    };
+
+    const disconnectBluetooth = () => {
+        localStorage.removeItem('bt_printer_paired');
+        localStorage.removeItem('bt_printer_name');
+        setBtStatus('disconnected');
+    };
 
     const clearAllData = async () => {
         setLoading(true);
@@ -81,9 +141,10 @@ export default function AdminDashboard() {
             const posId = (user.role === 'superadmin') ? 'all' : (user.posId || 'pos1');
             const response = await axios.get(`${API_URL}/api/tickets?posId=${posId}`);
 
+            // Store raw response for reprinting sub-tickets
+            setAllRawTickets(response.data);
+
             // FIX: Filter out "Sub-Tickets" (Coupons) to avoid double counting transactions.
-            // We only want to show the "Master Ticket" (Receipt) which contains the total amount.
-            // Master tickets do NOT have a parentId.
             const validTickets = response.data.filter((t: any) => !t.parentId);
 
             setTickets(validTickets);
@@ -123,6 +184,49 @@ export default function AdminDashboard() {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         navigate('/login');
+    };
+
+    const handleReprint = async (masterTicket: Ticket) => {
+        if (!BluetoothPrinter.isConnected) {
+            alert('Printer not connected. Please pair/connect the printer first.');
+            return;
+        }
+
+        setIsPrinting(masterTicket.id);
+        try {
+            // Find all sub-tickets (coupons) for this master ticket
+            const subTickets = allRawTickets.filter(t => t.parentId === masterTicket.id);
+
+            if (subTickets.length > 0) {
+                // Reprint individual coupons
+                for (const sub of subTickets) {
+                    await BluetoothPrinter.printTicket({
+                        id: sub.id,
+                        date: sub.date || new Date(sub.createdAt).toLocaleString(),
+                        items: sub.items,
+                        total: sub.amount,
+                        mobile: sub.mobile,
+                        paymentMode: sub.paymentMode || 'upi'
+                    });
+                }
+            } else {
+                // Fallback: Print master ticket itself if no sub-tickets are found
+                await BluetoothPrinter.printTicket({
+                    id: masterTicket.id,
+                    date: masterTicket.date || new Date(masterTicket.createdAt).toLocaleString(),
+                    items: masterTicket.items,
+                    total: masterTicket.amount,
+                    mobile: masterTicket.mobile,
+                    paymentMode: masterTicket.paymentMode || 'upi'
+                });
+            }
+            alert('Reprint successful!');
+        } catch (error: any) {
+            console.error('Reprint failed', error);
+            alert(`Reprint failed: ${error.message || 'Unknown error'}`);
+        } finally {
+            setIsPrinting(null);
+        }
     };
 
     const downloadCSV = () => {
@@ -346,6 +450,27 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="flex items-center gap-2 md:gap-4">
+                        {/* Bluetooth Printer Pairing */}
+                        <button
+                            onClick={btStatus === 'connected' ? disconnectBluetooth : connectBluetooth}
+                            className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all active:scale-95 backdrop-blur-sm ${btStatus === 'connected'
+                                ? 'bg-blue-600 text-white border-blue-700 shadow-md shadow-blue-500/20'
+                                : btStatus === 'paired_not_linked'
+                                    ? 'bg-amber-500 text-white border-amber-600'
+                                    : 'bg-slate-800/50 text-slate-400 border-slate-700 hover:bg-slate-800'
+                                }`}
+                        >
+                            <Printer size={14} className={isBTConnecting ? 'animate-bounce' : ''} />
+                            <span>
+                                {isBTConnecting ? 'PAIRING...' : btStatus === 'connected' ? 'PRINTER ONLINE' : btStatus === 'paired_not_linked' ? 'RECONNECT' : 'PAIR PRINTER'}
+                            </span>
+                        </button>
+                        {btError && (
+                            <span className="text-[8px] text-rose-500 font-bold uppercase tracking-tighter opacity-70 max-w-[100px] leading-tight">
+                                ERR: {btError}
+                            </span>
+                        )}
+
                         <div className="hidden md:flex items-center bg-slate-800/50 rounded-xl p-1 gap-1 border border-slate-700">
                             <button
                                 onClick={() => setShowEmailModal(true)}
@@ -734,6 +859,7 @@ export default function AdminDashboard() {
                                         <th className="px-6 py-5 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Payment</th>
                                         <th className="px-6 py-5 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Issued By</th>
                                         <th className="px-6 py-5 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Amount</th>
+                                        <th className="px-6 py-5 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -793,6 +919,23 @@ export default function AdminDashboard() {
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <span className="text-emerald-600 font-black text-base">₹{ticket.amount.toLocaleString()}</span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <button
+                                                        onClick={() => handleReprint(ticket)}
+                                                        disabled={isPrinting !== null}
+                                                        className={`flex items-center gap-1.5 ml-auto px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${isPrinting === ticket.id
+                                                            ? 'bg-amber-100 text-amber-600 animate-pulse'
+                                                            : 'bg-slate-100 text-slate-600 hover:bg-blue-600 hover:text-white shadow-sm'
+                                                            }`}
+                                                    >
+                                                        {isPrinting === ticket.id ? (
+                                                            <RefreshCw size={12} className="animate-spin" />
+                                                        ) : (
+                                                            <Printer size={12} />
+                                                        )}
+                                                        {isPrinting === ticket.id ? 'Printing...' : 'Reprint'}
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))
