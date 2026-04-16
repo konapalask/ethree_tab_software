@@ -16,7 +16,7 @@ export const RideCard = memo(function RideCard({ ride, onAdd }: RideCardProps) {
         // Random delay between 100ms and 2000ms
         const delay = Math.floor(Math.random() * 1900) + 100;
         const timer = setTimeout(() => {
-            setImageSrc(`${IMAGE_URL}/${ride.image}`);
+            setImageSrc(`${IMAGE_URL}/${ride.image}?ngrok-skip-browser-warning=true`);
         }, delay);
 
         return () => clearTimeout(timer);
