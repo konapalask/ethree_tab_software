@@ -13,7 +13,13 @@ const LOCAL_BACKEND = 'https://swampland-situated-barbell.ngrok-free.dev';
 // Always default to local server endpoint unless explicitly overridden via ENV
 export const API_URL = envApiUrl || LOCAL_BACKEND;
 
-// Add IMAGE_URL
-export const IMAGE_URL = `${API_URL}/images`;
+/**
+ * Image Base URL
+ * 
+ * In most local setups with ngrok, assets are served from the root.
+ * We remove the '/images' prefix to avoid 404s if the backend
+ * serves static files from a 'public' directory.
+ */
+export const IMAGE_URL = API_URL;
 
 export default API_URL;

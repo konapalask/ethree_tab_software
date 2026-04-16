@@ -482,7 +482,7 @@ export default function POS() {
                             <div className="relative group">
                                 <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-500 to-amber-300 rounded-lg blur opacity-50 group-hover:opacity-100 transition duration-200"></div>
                                 <img
-                                    src={`${IMAGE_URL}/logo.jpeg?ngrok-skip-browser-warning=1`}
+                                    src={`${IMAGE_URL}/logo.jpeg?ngrok-skip-browser-warning=true`}
                                     alt="ETHREE Logo"
                                     className="relative w-10 h-10 md:w-12 md:h-12 rounded-lg object-contain bg-white ring-1 ring-slate-900 p-1.5"
                                 />
