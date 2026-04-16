@@ -1,6 +1,7 @@
 /**
  * BluetoothPrinter.ts
- * A professional ESC/POS driver for thermal printers using Web Bluetooth.
+ * A professional UNIVERSAL ESC/POS driver for thermal printers using Web Bluetooth.
+ * Supports multiple common vendor UUIDs.
  */
 
 export interface PrinterDevice {
@@ -14,9 +15,15 @@ class BluetoothPrinterService {
     private device: any = null;
     private characteristic: any = null;
 
-    // Standard Thermal Printer UUIDs
-    private SERVICE_UUID = '000018f0-0000-1000-8000-00805f9b34fb';
-    private CHARACTERISTIC_UUID = '00002af1-0000-1000-8000-00805f9b34fb';
+    // List of common Thermal Printer Service UUIDs
+    private COMMON_SERVICES = [
+        '000018f0-0000-1000-8000-00805f9b34fb', // Standard
+        '0000ff00-0000-1000-8000-00805f9b34fb', // Common 1
+        '0000ae30-0000-1000-8000-00805f9b34fb', // Chinese models
+        '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC High Speed
+        '0000fee7-0000-1000-8000-00805f9b34fb', // Some generic models
+        '0000af30-0000-1000-8000-00805f9b34fb', // Additional models
+    ];
 
     // ESC/POS Commands
     private COMMANDS = {
@@ -32,7 +39,7 @@ class BluetoothPrinterService {
     };
 
     /**
-     * Connect to a Bluetooth Printer
+     * Connect to any compatible Bluetooth Printer
      */
     async connect(): Promise<string> {
         try {
@@ -40,28 +47,59 @@ class BluetoothPrinterService {
                 throw new Error('Bluetooth not supported on this browser.');
             }
 
+            console.log("Starting printer discovery with shared services...");
+            
             this.device = await (navigator as any).bluetooth.requestDevice({
-                filters: [
-                    { services: [this.SERVICE_UUID] },
-                    { vendorId: 0x0fe6 } // Common thermal printer vendor
-                ],
-                optionalServices: [this.SERVICE_UUID, '0000180a-0000-1000-8000-00805f9b34fb']
-            }).catch(async () => {
-                // Fallback for generic devices
-                return await (navigator as any).bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices: [this.SERVICE_UUID]
-                });
+                acceptAllDevices: true,
+                optionalServices: this.COMMON_SERVICES
             });
 
+            console.log('Connecting to GATT Server...');
             const server = await this.device.gatt.connect();
-            const service = await server.getPrimaryService(this.SERVICE_UUID);
-            this.characteristic = await service.getCharacteristic(this.CHARACTERISTIC_UUID);
 
-            console.log('Printer Connected:', this.device.name);
+            // Attempt to find any of our known services
+            let service = null;
+            
+            for (const uuid of this.COMMON_SERVICES) {
+                try {
+                    service = await server.getPrimaryService(uuid);
+                    if (service) {
+                        console.log('Found compatible service:', uuid);
+                        break;
+                    }
+                } catch (e) {
+                    continue;
+                }
+            }
+
+            if (!service) {
+                // If not found in our list, try to get all services (might fail on some browsers)
+                try {
+                    const services = await server.getPrimaryServices();
+                    if (services.length > 0) {
+                        service = services[0];
+                        console.log('Using first available service:', service.uuid);
+                    }
+                } catch (e) {
+                    throw new Error('No compatible print service found on this device.');
+                }
+            }
+
+            // Attempt to find the write characteristic
+            const characteristics = await service.getCharacteristics();
+            // Look for "Write" property
+            this.characteristic = characteristics.find((c: any) => 
+                c.properties.write || c.properties.writeWithoutResponse
+            );
+
+            if (!this.characteristic) {
+                throw new Error('No write characteristic found. This device might not be a printer.');
+            }
+
+            console.log('Printer Connected and Verified:', this.device.name);
             return this.device.name || 'Thermal Printer';
         } catch (error: any) {
-            console.error('Connection failed:', error);
+            console.error('Universal Connection failed:', error);
             throw error;
         }
     }
@@ -70,12 +108,23 @@ class BluetoothPrinterService {
      * Send raw data in chunks (Printers often have small buffers)
      */
     private async write(data: Uint8Array) {
-        if (!this.characteristic) throw new Error('Printer not connected');
+        if (!this.characteristic) {
+            // Check if device is still connected
+            if (this.device && this.device.gatt.connected) {
+                // Try to re-fetch characteristic? Usually lost session means re-connect.
+                throw new Error('Printer session lost. Please reconnect.');
+            }
+            throw new Error('Printer not connected');
+        }
         
         const CHUNK_SIZE = 20; // Safe chunk size for Bluetooth LE
         for (let i = 0; i < data.length; i += CHUNK_SIZE) {
             const chunk = data.slice(i, i + CHUNK_SIZE);
-            await this.characteristic.writeValue(chunk);
+            if (this.characteristic.properties.writeWithoutResponse) {
+                await this.characteristic.writeValueWithoutResponse(chunk);
+            } else {
+                await this.characteristic.writeValue(chunk);
+            }
         }
     }
 
@@ -92,50 +141,56 @@ class BluetoothPrinterService {
     }) {
         const encoder = new TextEncoder();
         
-        // 1. Initialize
-        await this.write(this.COMMANDS.INIT);
-        
-        // 2. Header
-        await this.write(this.COMMANDS.ALIGN_CENTER);
-        await this.write(this.COMMANDS.LARGE_TEXT);
-        await this.write(encoder.encode("ETHREE\n"));
-        await this.write(this.COMMANDS.NORMAL_TEXT);
-        await this.write(encoder.encode("Eat. Enjoy. Entertain\n"));
-        await this.write(encoder.encode("--------------------------------\n"));
+        try {
+            // 1. Initialize
+            await this.write(this.COMMANDS.INIT);
+            
+            // 2. Header
+            await this.write(this.COMMANDS.ALIGN_CENTER);
+            await this.write(this.COMMANDS.LARGE_TEXT);
+            await this.write(encoder.encode("ETHREE\n"));
+            await this.write(this.COMMANDS.NORMAL_TEXT);
+            await this.write(encoder.encode("Eat. Enjoy. Entertain\n"));
+            await this.write(encoder.encode("--------------------------------\n"));
 
-        // 3. Details
-        await this.write(this.COMMANDS.ALIGN_LEFT);
-        await this.write(encoder.encode(`ID: ${data.id}\n`));
-        await this.write(encoder.encode(`Date: ${data.date}\n`));
-        if (data.mobile) await this.write(encoder.encode(`Mobile: ${data.mobile}\n`));
-        await this.write(encoder.encode("--------------------------------\n"));
+            // 3. Details
+            await this.write(this.COMMANDS.ALIGN_LEFT);
+            await this.write(encoder.encode(`ID: ${data.id}\n`));
+            await this.write(encoder.encode(`Date: ${data.date}\n`));
+            if (data.mobile) await this.write(encoder.encode(`Mobile: ${data.mobile}\n`));
+            await this.write(encoder.encode("--------------------------------\n"));
 
-        // 4. Items
-        for (const item of data.items) {
-            const line = `${item.name.padEnd(20)} x${item.quantity}\n`;
-            await this.write(encoder.encode(line));
-            await this.write(encoder.encode(`Price: INR ${item.price * item.quantity}\n`));
+            // 4. Items
+            for (const item of data.items) {
+                const name = item.name.toUpperCase().substring(0, 18);
+                const line = `${name.padEnd(20)} x${item.quantity}\n`;
+                await this.write(encoder.encode(line));
+                await this.write(encoder.encode(`Price: INR ${item.price * item.quantity}\n`));
+            }
+
+            // 5. Total
+            await this.write(encoder.encode("--------------------------------\n"));
+            await this.write(this.COMMANDS.BOLD_ON);
+            await this.write(encoder.encode(`TOTAL PAYABLE: INR ${data.total}\n`));
+            await this.write(this.COMMANDS.BOLD_OFF);
+            if (data.paymentMode) await this.write(encoder.encode(`Mode: ${data.paymentMode.toUpperCase()}\n`));
+            
+            // 6. Footer
+            await this.write(this.COMMANDS.ALIGN_CENTER);
+            await this.write(encoder.encode("\nWWW.ETHREE.IN\n"));
+            await this.write(encoder.encode("Thank You! Visit Again\n"));
+            
+            // 7. Cut
+            await this.write(new Uint8Array([0x0A, 0x0A, 0x0A, 0x0A])); // Line feeds
+            await this.write(this.COMMANDS.FEED_CUT);
+        } catch (e) {
+            console.error("Print execution failed", e);
+            throw e;
         }
-
-        // 5. Total
-        await this.write(encoder.encode("--------------------------------\n"));
-        await this.write(this.COMMANDS.BOLD_ON);
-        await this.write(encoder.encode(`TOTAL PAYABLE: INR ${data.total}\n`));
-        await this.write(this.COMMANDS.BOLD_OFF);
-        if (data.paymentMode) await this.write(encoder.encode(`Mode: ${data.paymentMode.toUpperCase()}\n`));
-        
-        // 6. Footer
-        await this.write(this.COMMANDS.ALIGN_CENTER);
-        await this.write(encoder.encode("\nWWW.ETHREE.IN\n"));
-        await this.write(encoder.encode("Thank You! Visit Again\n"));
-        
-        // 7. Cut
-        await this.write(new Uint8Array([0x0A, 0x0A, 0x0A])); // Line feeds
-        await this.write(this.COMMANDS.FEED_CUT);
     }
 
     get isConnected() {
-        return this.device && this.device.gatt.connected;
+        return this.device && this.device.gatt.connected && this.characteristic;
     }
 }
 

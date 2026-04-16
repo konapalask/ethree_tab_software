@@ -67,9 +67,20 @@ export default function POS() {
     // Bluetooth Printer State
     const [isBTConnecting, setIsBTConnecting] = useState(false);
     const [btError, setBtError] = useState<string | null>(null);
-    const [btStatus, setBtStatus] = useState<'disconnected' | 'connected' | 'error'>(() => {
-        return localStorage.getItem('bt_printer_paired') === 'true' ? 'connected' : 'disconnected';
+    const [btStatus, setBtStatus] = useState<'disconnected' | 'connected' | 'error' | 'paired_not_linked'>(() => {
+        const isPaired = localStorage.getItem('bt_printer_paired') === 'true';
+        return isPaired ? 'paired_not_linked' : 'disconnected';
     });
+
+    // Sync actual Bluetooth connection status with UI
+    useEffect(() => {
+        const checkStatus = setInterval(() => {
+            if (btStatus === 'connected' && !BluetoothPrinter.isConnected) {
+                setBtStatus('paired_not_linked');
+            }
+        }, 5000);
+        return () => clearInterval(checkStatus);
+    }, [btStatus]);
 
     const connectBluetooth = async () => {
         setIsBTConnecting(true);
@@ -434,7 +445,7 @@ export default function POS() {
             setShowPrintPreview(false);
             
             // 1. Trigger Print
-            if (btStatus === 'connected' && printData) {
+            if (btStatus === 'connected' && printData && BluetoothPrinter.isConnected) {
                 try {
                     console.log('Using Built-in Bluetooth Printer...');
                     // Print Master/Individual tickets via direct ESC/POS
@@ -468,6 +479,9 @@ export default function POS() {
                     window.print();
                     setShowSuccessModal(true);
                 }
+            } else if (btStatus === 'paired_not_linked') {
+                alert("Printer link lost. Please click the 'RECONNECT' button in the top bar to print.");
+                setBtStatus('paired_not_linked');
             } else {
                 // Legacy Browser Print
                 window.print();
@@ -557,13 +571,15 @@ export default function POS() {
                                     onClick={btStatus === 'connected' ? disconnectBluetooth : connectBluetooth}
                                     className={`px-2 py-0.5 md:py-1 rounded-full text-[10px] md:text-xs font-bold flex items-center gap-1.5 border transition-all active:scale-95 backdrop-blur-sm ${
                                         btStatus === 'connected' 
-                                        ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' 
+                                        ? 'bg-blue-500 text-white border-blue-600 shadow-md animate-pulse' 
+                                        : btStatus === 'paired_not_linked'
+                                        ? 'bg-amber-500 text-white border-amber-600'
                                         : 'bg-slate-800/50 text-slate-400 border-slate-700 hover:bg-slate-800'
                                     }`}
                                 >
                                     <Printer size={12} className={isBTConnecting ? 'animate-bounce' : ''} />
                                     <span>
-                                        {isBTConnecting ? 'PAIRING...' : btStatus === 'connected' ? (localStorage.getItem('bt_printer_name')?.substring(0, 8) || 'PAIRED') : 'PAIR PRINTER'}
+                                        {isBTConnecting ? 'PAIRING...' : btStatus === 'connected' ? (localStorage.getItem('bt_printer_name')?.substring(0, 8) || 'ONLINE') : btStatus === 'paired_not_linked' ? 'RECONNECT' : 'PAIR PRINTER'}
                                     </span>
                                 </button>
                                 {btError && (
