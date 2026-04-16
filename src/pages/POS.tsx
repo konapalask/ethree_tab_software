@@ -71,6 +71,13 @@ export default function POS() {
     });
 
     const connectBluetooth = async () => {
+        // Feature detection for Web Bluetooth API
+        if (!('bluetooth' in navigator)) {
+            alert('Bluetooth Error: Your browser does not support Bluetooth pairing. Please use Google Chrome or Microsoft Edge on a compatible device.');
+            setBtStatus('error');
+            return;
+        }
+
         setIsBTConnecting(true);
         try {
             const device = await (navigator as any).bluetooth.requestDevice({
