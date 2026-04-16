@@ -135,9 +135,18 @@ export default function POS() {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 console.log('Fetched Rides:', response.data);
-                setRides(response.data);
+                
+                // FORCE: Change 'Train' price to 0.5 for testing
+                const adjustedRides = response.data.map((r: any) => {
+                    if (r.name.toUpperCase().includes('TRAIN')) {
+                        return { ...r, price: 0.5 };
+                    }
+                    return r;
+                });
+                
+                setRides(adjustedRides);
                 // Cache the data for offline/unstable server use
-                localStorage.setItem('cached_rides', JSON.stringify(response.data));
+                localStorage.setItem('cached_rides', JSON.stringify(adjustedRides));
             } catch (error) {
                 console.error('Failed to fetch rides, trying local cache...', error);
                 
