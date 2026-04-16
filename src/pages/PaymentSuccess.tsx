@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, Printer, Home, ShoppingBag, Bluetooth, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Printer, Home, Bluetooth, RefreshCw } from 'lucide-react';
 import axios from 'axios';
 import { API_URL } from '../api/config';
 import { BluetoothPrinter } from '../api/BluetoothPrinter';
@@ -10,6 +10,8 @@ export default function PaymentSuccess() {
     const [btStatus, setBtStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
     const [isConnecting, setIsConnecting] = useState(false);
     const [lastPrintData, setLastPrintData] = useState<any>(null);
+
+    console.log('Current Bluetooth Status:', btStatus);
 
     useEffect(() => {
         // 1. History Trap - Block Back Button
@@ -44,34 +46,44 @@ export default function PaymentSuccess() {
 
     const handleDirectBTPrint = async () => {
         setIsConnecting(true);
+        const targetPrinter = "PRINTER 001-6D49";
+
         try {
-            const name = await BluetoothPrinter.connect();
-            setBtStatus('connected');
+            // 1. Try Auto-Connect first (Fastest/Silent)
+            let connectedName = await BluetoothPrinter.autoConnect(targetPrinter);
             
-            if (lastPrintData) {
-                console.log('Printing UPI Tickets via Bluetooth...');
+            // 2. Fallback to Manual Connect with specific filter
+            if (!connectedName) {
+                console.log('Auto-connect failed or not supported, trying manual picker...');
+                connectedName = await BluetoothPrinter.connect(targetPrinter);
+            }
+
+            if (connectedName) {
+                setBtStatus('connected');
                 
-                // SKIPPING Master Receipt (Double Paper Fix)
-                
-                // Print individual tickets
-                if (lastPrintData.subTickets && lastPrintData.subTickets.length > 0) {
-                    for (const sub of lastPrintData.subTickets) {
-                        await BluetoothPrinter.printTicket({
-                            id: sub.id,
-                            date: sub.date,
-                            items: sub.items,
-                            total: sub.amount,
-                            mobile: sub.mobile,
-                            paymentMode: 'upi' // Corrected label for labels
-                        });
+                if (lastPrintData) {
+                    console.log('Printing UPI Tickets via Bluetooth...');
+                    
+                    // Print individual tickets
+                    if (lastPrintData.subTickets && lastPrintData.subTickets.length > 0) {
+                        for (const sub of lastPrintData.subTickets) {
+                            await BluetoothPrinter.printTicket({
+                                id: sub.id,
+                                date: sub.date,
+                                items: sub.items,
+                                total: sub.amount,
+                                mobile: sub.mobile,
+                                paymentMode: 'upi'
+                            });
+                        }
                     }
+                    
+                    // Clear state
+                    localStorage.removeItem('pending_upi_transaction');
                 }
-                
-                // Clear state now that we definitely printed
-                localStorage.removeItem('pending_upi_transaction');
             }
         } catch (error: any) {
-            console.error('BT Print failed:', error);
+            console.error('BT/Auto-Connect failed:', error);
             alert(`Printer Error: ${error.message || 'Please ensure Bluetooth is ON'}`);
         } finally {
             setIsConnecting(false);

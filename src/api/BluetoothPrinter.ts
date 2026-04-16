@@ -41,8 +41,9 @@ class BluetoothPrinterService {
 
     /**
      * Connect to any compatible Bluetooth Printer
+     * @param targetName Optional name to filter for (e.g. "PRINTER 001-6D49")
      */
-    async connect(): Promise<string> {
+    async connect(targetName?: string): Promise<string> {
         try {
             if (!(navigator as any).bluetooth) {
                 // Check if this is a Median App
@@ -53,60 +54,96 @@ class BluetoothPrinterService {
                 throw new Error('Bluetooth not supported on this browser.');
             }
 
-            console.log("Starting printer discovery with shared services...");
+            console.log("Starting printer discovery...");
             
-            this.device = await (navigator as any).bluetooth.requestDevice({
-                acceptAllDevices: true,
+            const options: any = {
                 optionalServices: this.COMMON_SERVICES
-            });
+            };
+
+            // If a specific printer name is provided, filter for it to make selection easier
+            if (targetName) {
+                options.filters = [{ name: targetName }];
+            } else {
+                options.acceptAllDevices = true;
+            }
+            
+            this.device = await (navigator as any).bluetooth.requestDevice(options);
 
             console.log('Connecting to GATT Server...');
             const server = await this.device.gatt.connect();
-
-            // Attempt to find any of our known services
-            let service = null;
             
-            for (const uuid of this.COMMON_SERVICES) {
-                try {
-                    service = await server.getPrimaryService(uuid);
-                    if (service) {
-                        console.log('Found compatible service:', uuid);
-                        break;
-                    }
-                } catch (e) {
-                    continue;
-                }
-            }
-
-            if (!service) {
-                // If not found in our list, try to get all services (might fail on some browsers)
-                try {
-                    const services = await server.getPrimaryServices();
-                    if (services.length > 0) {
-                        service = services[0];
-                        console.log('Using first available service:', service.uuid);
-                    }
-                } catch (e) {
-                    throw new Error('No compatible print service found on this device.');
-                }
-            }
-
-            // Attempt to find the write characteristic
-            const characteristics = await service.getCharacteristics();
-            // Look for "Write" property
-            this.characteristic = characteristics.find((c: any) => 
-                c.properties.write || c.properties.writeWithoutResponse
-            );
-
-            if (!this.characteristic) {
-                throw new Error('No write characteristic found. This device might not be a printer.');
-            }
+            // Shared Setup Logic
+            await this.setupService(server);
 
             console.log('Printer Connected and Verified:', this.device.name);
             return this.device.name || 'Thermal Printer';
         } catch (error: any) {
             console.error('Universal Connection failed:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Attempt to reconnect to a previously authorized device without a picker
+     * (Experimental Web Bluetooth feature)
+     */
+    async autoConnect(targetName: string): Promise<string | null> {
+        if (!(navigator as any).bluetooth || !(navigator as any).bluetooth.getDevices) {
+            return null;
+        }
+
+        try {
+            const devices = await (navigator as any).bluetooth.getDevices();
+            const target = devices.find((d: any) => d.name === targetName);
+
+            if (target) {
+                console.log('Attempting Auto-Reconnect to:', targetName);
+                this.device = target;
+                const server = await this.device.gatt.connect();
+                await this.setupService(server);
+                return this.device.name;
+            }
+        } catch (e) {
+            console.warn('Auto-reconnect failed, falling back to manual picker', e);
+        }
+        return null;
+    }
+
+    /**
+     * Internal logic to find the correct service and characteristic
+     */
+    private async setupService(server: any) {
+        // Attempt to find any of our known services
+        let service = null;
+        
+        for (const uuid of this.COMMON_SERVICES) {
+            try {
+                service = await server.getPrimaryService(uuid);
+                if (service) break;
+            } catch (e) {
+                continue;
+            }
+        }
+
+        if (!service) {
+            try {
+                const services = await server.getPrimaryServices();
+                if (services.length > 0) service = services[0];
+            } catch (e) {
+                throw new Error('No compatible print service found.');
+            }
+        }
+
+        if (!service) throw new Error('Could not resolve printer service.');
+
+        // Attempt to find the write characteristic
+        const characteristics = await service.getCharacteristics();
+        this.characteristic = characteristics.find((c: any) => 
+            c.properties.write || c.properties.writeWithoutResponse
+        );
+
+        if (!this.characteristic) {
+            throw new Error('No write characteristic found.');
         }
     }
 
