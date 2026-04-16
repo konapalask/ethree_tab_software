@@ -2,6 +2,10 @@
     "cleanUrls": true,
     "rewrites": [
         {
+            "source": "/images/(.*)",
+            "destination": "https://swampland-situated-barbell.ngrok-free.dev/images/$1?ngrok-skip-browser-warning=true"
+        },
+        {
             "source": "/(.*)",
             "destination": "/index.html"
         }

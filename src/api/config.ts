@@ -16,9 +16,9 @@ export const API_URL = envApiUrl || LOCAL_BACKEND;
 /**
  * Image Base URL
  * 
- * Your local server likely serves static files from an '/images' subfolder.
- * We restore this prefix to avoid 404 errors for the logo and ride images.
+ * We now use a Vercel proxy (/images) to fetch assets from the local server.
+ * This bypasses ngrok browser warnings and browser security blocks.
  */
-export const IMAGE_URL = `${API_URL}/images`;
+export const IMAGE_URL = '/images';
 
 export default API_URL;
