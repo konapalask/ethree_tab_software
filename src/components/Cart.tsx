@@ -1,6 +1,6 @@
 import { memo, useState, useEffect } from 'react';
 import type { Ride } from '../data/rides';
-import { Trash2, Printer, ShoppingCart, Banknote, Smartphone } from 'lucide-react';
+import { Trash2, Printer, ShoppingCart, Smartphone } from 'lucide-react';
 import { IMAGE_URL } from '../api/config';
 
 interface CartItem extends Ride {
@@ -36,8 +36,8 @@ interface CartProps {
     onUpdateQuantity: (id: string, delta: number) => void;
     onClear: () => void;
     onPrint: () => void;
-    paymentMode: 'cash' | 'upi' | null;
-    onPaymentModeChange: (mode: 'cash' | 'upi') => void;
+    paymentMode: 'upi' | null;
+    onPaymentModeChange: (mode: 'upi') => void;
     mobileNumber: string;
     onMobileNumberChange: (val: string) => void;
 }
@@ -130,21 +130,8 @@ export const Cart = memo(function Cart({
 
                         {/* Payment Mode */}
                         <div className="space-y-1">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Payment Mode Selection</label>
-                            <div className="grid grid-cols-2 gap-2">
-                                <button
-                                    onClick={() => onPaymentModeChange('cash')}
-                                    className={`group flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl border-2 transition-all duration-300 relative overflow-hidden ${paymentMode === 'cash'
-                                        ? 'border-emerald-500 bg-emerald-500/5 text-emerald-700 shadow-sm'
-                                        : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200 hover:bg-slate-50'
-                                        }`}
-                                >
-                                    <div className={`p-1.5 rounded-lg transition-transform duration-300 group-hover:scale-105 ${paymentMode === 'cash' ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20' : 'bg-slate-100'}`}>
-                                        <Banknote size={18} />
-                                    </div>
-                                    <span className="text-[10px] font-black tracking-widest uppercase">CASH</span>
-                                    {paymentMode === 'cash' && <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
-                                </button>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Payment Method</label>
+                            <div className="grid grid-cols-1 gap-2">
                                 <button
                                     onClick={() => onPaymentModeChange('upi')}
                                     className={`group flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl border-2 transition-all duration-300 relative overflow-hidden ${paymentMode === 'upi'
@@ -155,7 +142,7 @@ export const Cart = memo(function Cart({
                                     <div className={`p-1.5 rounded-lg transition-transform duration-300 group-hover:scale-105 ${paymentMode === 'upi' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'bg-slate-100'}`}>
                                         <Smartphone size={18} />
                                     </div>
-                                    <span className="text-[10px] font-black tracking-widest uppercase">UPI / QR</span>
+                                    <span className="text-[10px] font-black tracking-widest uppercase">UPI / QR PAYMENT</span>
                                     {paymentMode === 'upi' && <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />}
                                 </button>
                             </div>

@@ -20,7 +20,7 @@ export default function POS() {
     const [mobileNumber, setMobileNumber] = useState('');
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showMobileCart, setShowMobileCart] = useState(false);
-    const [paymentMode, setPaymentMode] = useState<'cash' | 'upi' | null>(null);
+    const [paymentMode, setPaymentMode] = useState<'upi' | null>('upi');
     const [rides, setRides] = useState<Ride[]>([]);
     const [loadingRides, setLoadingRides] = useState(true);
     // State for preview and cropping
@@ -317,7 +317,7 @@ export default function POS() {
                 const parsed = JSON.parse(pendingData);
                 setCart(parsed.cart);
                 setMobileNumber(parsed.mobileNumber);
-                alert("Payment Failed: Please Try Again or use Cash");
+                alert("Payment Failed: Please Try Again or check connection");
                 localStorage.removeItem('pending_upi_transaction');
                 navigate('/pos', { replace: true }); // Clear search params
             }
@@ -417,7 +417,7 @@ export default function POS() {
             items: cart,
             status: 'valid',
             mobile: mobileNumber,
-            paymentMode: (paymentMode || 'cash') as 'cash' | 'upi',
+            paymentMode: (paymentMode || 'upi') as 'upi',
             createdBy: loggedUser.name || loggedUser.email || 'Cashier',
             posId: loggedUser.posId || 'pos1',
             createdAt: new Date().toISOString(),
@@ -440,7 +440,7 @@ export default function POS() {
                         total: 100,
                         status: 'valid',
                         mobile: mobileNumber,
-                        paymentMode: (paymentMode || 'cash') as 'cash' | 'upi',
+                        paymentMode: (paymentMode || 'upi') as 'upi',
                         createdBy: loggedUser.name || 'Unknown',
                         posId: loggedUser.posId || 'pos1',
                         createdAt: new Date().toISOString(),
@@ -461,7 +461,7 @@ export default function POS() {
                         items: [{ ...item, quantity: 1 }], // Single ride per ticket
                         status: 'valid',
                         mobile: mobileNumber,
-                        paymentMode: (paymentMode || 'cash') as 'cash' | 'upi',
+                        paymentMode: (paymentMode || 'upi') as 'upi',
                         createdBy: loggedUser.name || 'Unknown',
                         posId: loggedUser.posId || 'pos1',
                         createdAt: new Date().toISOString(),
@@ -542,17 +542,17 @@ export default function POS() {
                 }
             } catch (error) {
                 console.error('Payment initiation failed:', error);
-                alert('UPI Payment redirection failed. Please try Cash or check internet.');
+                alert('UPI Payment redirection failed. Please check internet connection and try again.');
                 localStorage.removeItem('pending_upi_transaction'); // Clean up on initiation error
             }
         } else {
-            // For Cash, show print preview
+            // Unreachable if paymentMode is always 'upi' during checkout
             setShowPrintPreview(true);
         }
     };
 
     const handlePreviewConfirm = async () => {
-        if (paymentMode === 'cash' || !paymentMode) {
+        if (!paymentMode) {
             setShowPrintPreview(false);
             
             // 1. Trigger Print
@@ -571,12 +571,12 @@ export default function POS() {
                                 items: sub.items,
                                 total: sub.amount,
                                 mobile: sub.mobile,
-                                paymentMode: paymentMode || 'cash'
+                                paymentMode: paymentMode || 'upi'
                             });
                         }
                     }
                     
-                    // KEEP PREVIEW VISIBLE for 2 seconds so they can see the "CASH" highlight
+                    // KEEP PREVIEW VISIBLE for 2 seconds so they can see the confirmation highlight
                     setTimeout(() => {
                         setShowPrintPreview(false);
                         setShowSuccessModal(true);
@@ -749,7 +749,7 @@ export default function POS() {
                                 <span className="w-1.5 h-6 md:h-8 bg-gradient-to-b from-amber-400 to-amber-600 rounded-full shadow-sm"></span>
                                 Available Rides
                             </h2>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3 pb-24 md:pb-0">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 pb-24 md:pb-0">
                                 {loadingRides ? (
                                     <div className="col-span-full py-10 flex flex-col items-center justify-center text-slate-400">
                                         <RefreshCw size={32} className="animate-spin mb-2" />
