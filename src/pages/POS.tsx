@@ -75,8 +75,27 @@ export default function POS() {
     const [pollingTxnId, setPollingTxnId] = useState<string | null>(null);
     const [isPrinting, setIsPrinting] = useState(false);
 
-    // Sync actual Bluetooth connection status with UI
+    // Auto-Resume Bluetooth on Mount
     useEffect(() => {
+        const autoResume = async () => {
+            const isPaired = localStorage.getItem('bt_printer_paired') === 'true';
+            const targetName = "PRINTER 001-6D49";
+            
+            if (isPaired && !BluetoothPrinter.isConnected) {
+                console.log('Attempting Auto-Resume Bluetooth connection...');
+                try {
+                    const connected = await BluetoothPrinter.autoConnect(targetName);
+                    if (connected) {
+                        setBtStatus('connected');
+                        console.log('Bluetooth Auto-Resumed Successfully!');
+                    }
+                } catch (e) {
+                    console.log('Auto-resume failed (first time session or out of range)');
+                }
+            }
+        };
+        autoResume();
+
         const checkStatus = setInterval(() => {
             if (btStatus === 'connected' && !BluetoothPrinter.isConnected) {
                 setBtStatus('paired_not_linked');
@@ -139,10 +158,10 @@ export default function POS() {
                 });
                 console.log('Fetched Rides:', response.data);
                 
-                // FORCE: Change 'Train' price to 0.01 for testing
+                // FORCE: Change 'Train' price back to 50
                 const adjustedRides = response.data.map((r: any) => {
                     if (r.name.toUpperCase().includes('TRAIN')) {
-                        return { ...r, price: 0.01 };
+                        return { ...r, price: 50 };
                     }
                     return r;
                 });
