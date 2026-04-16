@@ -1,13 +1,45 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 // Main App Component
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
 import POS from './pages/POS';
 import Login from './pages/Login';
-import VerifyTicket from './pages/VerifyTicket';
 import AdminDashboard from './pages/AdminDashboard';
-import Accounts from './pages/Accounts';
 import RideManagement from './pages/RideManagement';
+import PaymentSuccess from './pages/PaymentSuccess';
+import PaymentFailure from './pages/PaymentFailure';
+
+// Setup Global Axios Interceptors IMMEDIATELY before component mounts
+axios.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+      config.headers['x-auth-token'] = token;
+    }
+    // Bypass ngrok browser warning using Query Parameter globally
+    config.params = {
+      ...config.params,
+      'ngrok-skip-browser-warning': '1'
+    };
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      if (!window.location.hash.includes('/login')) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.hash = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 function PrivateRoute({ children, role }: { children: React.ReactNode, role?: string }) {
   const token = localStorage.getItem('token');
@@ -20,57 +52,18 @@ function PrivateRoute({ children, role }: { children: React.ReactNode, role?: st
 
   if (role && user.role !== role) {
     if (user.role === 'admin') return <Navigate to="/admin" replace />;
-    if (user.role === 'verify') return <Navigate to="/verify" replace />;
     return <Navigate to="/pos" replace />;
   }
 
   // Special Case: Block Admin and Verify from POS
   if (!role && window.location.hash.includes('/pos')) {
     if (user.role === 'admin') return <Navigate to="/admin" replace />;
-    if (user.role === 'verify') return <Navigate to="/verify" replace />;
   }
 
   return children;
 }
 
 function App() {
-  // Setup Global Axios Interceptors
-  useEffect(() => {
-    // Request Interceptor: Attach Token
-    const requestInterceptor = axios.interceptors.request.use(
-      (config) => {
-        const token = localStorage.getItem('token');
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-          // Also set x-auth-token for legacy routes
-          config.headers['x-auth-token'] = token;
-        }
-        return config;
-      },
-      (error) => Promise.reject(error)
-    );
-
-    // Response Interceptor: Auto Logout on 401/403
-    const responseInterceptor = axios.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-          if (!window.location.hash.includes('/login')) {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            window.location.hash = '#/login';
-          }
-        }
-        return Promise.reject(error);
-      }
-    );
-
-    return () => {
-      axios.interceptors.request.eject(requestInterceptor);
-      axios.interceptors.response.eject(responseInterceptor);
-    };
-  }, []);
-
   return (
     <Router>
       <Routes>
@@ -83,14 +76,7 @@ function App() {
             </PrivateRoute>
           }
         />
-        <Route
-          path="/verify"
-          element={
-            <PrivateRoute role="verify">
-              <VerifyTicket />
-            </PrivateRoute>
-          }
-        />
+
         <Route
           path="/admin"
           element={
@@ -99,14 +85,7 @@ function App() {
             </PrivateRoute>
           }
         />
-        <Route
-          path="/accounts"
-          element={
-            <PrivateRoute role="admin">
-              <Accounts />
-            </PrivateRoute>
-          }
-        />
+
         <Route
           path="/admin/rides"
           element={
@@ -115,12 +94,14 @@ function App() {
             </PrivateRoute>
           }
         />
+        <Route path="/payment-success" element={<PaymentSuccess />} />
+        <Route path="/payment-failure" element={<PaymentFailure />} />
         <Route path="/" element={
           localStorage.getItem('token')
             ? (() => {
               const user = JSON.parse(localStorage.getItem('user') || '{}');
               if (user.role === 'admin') return <Navigate to="/admin" replace />;
-              if (user.role === 'verify') return <Navigate to="/verify" replace />;
+              if (user.role === 'admin') return <Navigate to="/admin" replace />;
               return <Navigate to="/pos" replace />;
             })()
             : <Navigate to="/login" replace />

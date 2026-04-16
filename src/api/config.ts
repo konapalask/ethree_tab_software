@@ -1,22 +1,19 @@
 /**
  * Central API Configuration
  * 
- * In production (Vercel), if the frontend is deployed on the same project
- * as the backend, we can use relative paths (/api).
- * 
- * If they are separate, we use the VITE_API_URL environment variable.
+ * Uses the VITE_API_URL environment variable if provided, 
+ * otherwise defaults to the local ngrok server.
  */
 
-const isProduction = import.meta.env.PROD;
 const envApiUrl = import.meta.env.VITE_API_URL;
 
-// Default fallbacks
-const LOCAL_BACKEND = 'https://software-rho-three.vercel.app'; // Migrated to Vercel API 
-const VERCEL_BACKEND = 'https://software-rho-three.vercel.app';
+// Default local server endpoint (ngrok tunnel)
+const LOCAL_BACKEND = 'https://swampland-situated-barbell.ngrok-free.dev'; 
 
-export const API_URL = envApiUrl || (isProduction ? VERCEL_BACKEND : LOCAL_BACKEND);
+// Always default to local server endpoint unless explicitly overridden via ENV
+export const API_URL = envApiUrl || LOCAL_BACKEND;
 
-// For features like loyalty that might specifically need the Vercel URL as a fallback
-export const FALLBACK_API_URL = VERCEL_BACKEND;
+// Add IMAGE_URL
+export const IMAGE_URL = `${API_URL}/images`;
 
 export default API_URL;

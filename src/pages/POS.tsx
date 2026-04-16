@@ -5,9 +5,9 @@ import { Cart } from '../components/Cart';
 import { Ticket } from '../components/Ticket';
 // TicketVerifier removed
 import { Ticket as TicketIcon, LogOut, WifiOff, RefreshCw, Printer, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { API_URL, FALLBACK_API_URL } from '../api/config';
+import { API_URL, IMAGE_URL } from '../api/config';
 
 interface CartItem extends Ride {
     quantity: number;
@@ -19,8 +19,6 @@ export default function POS() {
     const [mobileNumber, setMobileNumber] = useState('');
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showMobileCart, setShowMobileCart] = useState(false);
-    const [loyaltyPoints, setLoyaltyPoints] = useState<number | null>(null);
-    const [loadingPoints, setLoadingPoints] = useState(false);
     const [paymentMode, setPaymentMode] = useState<'cash' | 'upi' | null>(null);
     const [rides, setRides] = useState<Ride[]>([]);
     const [loadingRides, setLoadingRides] = useState(true);
@@ -31,6 +29,9 @@ export default function POS() {
         const saved = localStorage.getItem('efour_print_settings');
         return saved ? JSON.parse(saved) : { top: 0, bottom: 0, left: 0, right: 0, scale: 1 };
     });
+
+    const [showAllRides, setShowAllRides] = useState(false);
+    const FEATURED_RIDE_NAMES = ['ETHREE BUS', 'SUN @ MOON', 'TL TRAIN'];
 
     // Save settings to localStorage whenever they change
     useEffect(() => {
@@ -60,6 +61,52 @@ export default function POS() {
 
     const ticketRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
+    const location = useLocation();
+
+    // Bluetooth Printer State
+    const [isBTConnecting, setIsBTConnecting] = useState(false);
+    const [btError, setBtError] = useState<string | null>(null);
+    const [btStatus, setBtStatus] = useState<'disconnected' | 'connected' | 'error'>(() => {
+        return localStorage.getItem('bt_printer_paired') === 'true' ? 'connected' : 'disconnected';
+    });
+
+    const connectBluetooth = async () => {
+        setIsBTConnecting(true);
+        try {
+            const device = await (navigator as any).bluetooth.requestDevice({
+                acceptAllDevices: true,
+                optionalServices: ['0000180a-0000-1000-8000-00805f9b34fb'] // Generic access or common printer services
+            });
+            
+            console.log('Bluetooth Device Selected:', device.name);
+            setBtStatus('connected');
+            setBtError(null);
+            localStorage.setItem('bt_printer_paired', 'true');
+            localStorage.setItem('bt_printer_name', device.name || 'Unknown Printer');
+            alert(`Printer "${device.name}" Paired Successfully!`);
+        } catch (error: any) {
+            console.error('Bluetooth Connection Failed:', error);
+            setBtStatus('error');
+            setBtError(error.name || 'Unknown Error');
+            
+            // Detailed helpful alerts
+            if (error.name === 'NotFoundError') {
+                alert('Bluetooth pairing failed: No printer was selected.');
+            } else if (error.name === 'SecurityError') {
+                alert('Bluetooth Error: Browser blocked access. Ensure the site is trusted or served via Localhost/HTTPS.');
+            } else {
+                alert(`Bluetooth pairing failed: ${error.message || 'Unknown error'}`);
+            }
+        } finally {
+            setIsBTConnecting(false);
+        }
+    };
+
+    const disconnectBluetooth = () => {
+        localStorage.removeItem('bt_printer_paired');
+        localStorage.removeItem('bt_printer_name');
+        setBtStatus('disconnected');
+    };
 
     useEffect(() => {
         const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -74,17 +121,28 @@ export default function POS() {
             setLoadingRides(true);
             try {
                 // Use centralized API_URL
-                // Append timestamp to prevent caching
                 const token = localStorage.getItem('token');
                 const response = await axios.get(`${API_URL}/api/products?t=${Date.now()}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 console.log('Fetched Rides:', response.data);
                 setRides(response.data);
+                // Cache the data for offline/unstable server use
+                localStorage.setItem('cached_rides', JSON.stringify(response.data));
             } catch (error) {
-                console.error('Failed to fetch rides', error);
-                // Fallback to static rides if API fails? 
-                // Better to show error or empty. 
+                console.error('Failed to fetch rides, trying local cache...', error);
+                
+                // Fallback to cached rides from LocalStorage
+                const cached = localStorage.getItem('cached_rides');
+                if (cached) {
+                    try {
+                        const parsed = JSON.parse(cached);
+                        setRides(parsed);
+                        console.log('Loaded rides from LocalStorage cache');
+                    } catch (parseError) {
+                        console.error('Failed to parse cached rides', parseError);
+                    }
+                }
             } finally {
                 setLoadingRides(false);
             }
@@ -117,41 +175,47 @@ export default function POS() {
         }
     }, [isOnline, pendingCount]);
 
-    // Fetch Loyalty Points (Debounced)
+    // Handle Return from UPI Gateway
     useEffect(() => {
-        if (mobileNumber.length === 10) {
-            const timer = setTimeout(() => {
-                fetchLoyaltyPoints(mobileNumber);
-            }, 500);
-            return () => clearTimeout(timer);
-        } else {
-            setLoyaltyPoints(null);
-        }
-    }, [mobileNumber]);
+        const query = new URLSearchParams(location.search);
+        const paymentStatus = query.get('payment');
+        
+        if (paymentStatus === 'success') {
+            const pendingData = localStorage.getItem('pending_upi_transaction');
+            if (pendingData) {
+                const parsed = JSON.parse(pendingData);
+                setPrintData(parsed.printData);
+                setTicketsToSave(parsed.ticketsToSave);
+                setMobileNumber(parsed.mobileNumber);
+                
+                // Allow state to settle so <Ticket> renders, then print
+                setTimeout(() => {
+                    window.print();
+                    setShowSuccessModal(true);
+                    
+                    // Now do background sync
+                    axios.post(`${API_URL}/api/tickets`, parsed.ticketsToSave).catch(e => console.error(e));
+                    
+                    if (parsed.mobileNumber && parsed.mobileNumber.length === 10 && parsed.totalWithTax >= 100) {
+                        axios.post(`${API_URL}/api/loyalty/earn`, { mobile: parsed.mobileNumber, amount: parsed.totalWithTax, ticketId: parsed.printData?.id || '' }).catch(() => {});
+                    }
 
-    const fetchLoyaltyPoints = async (mobile: string) => {
-        setLoadingPoints(true);
-        try {
-            const res = await axios.get(`${API_URL || FALLBACK_API_URL}/api/loyalty/${mobile}`);
-            if (res.data.points !== undefined) {
-                setLoyaltyPoints(res.data.points);
+                    localStorage.removeItem('pending_upi_transaction');
+                    navigate('/pos', { replace: true }); // Clear search params
+                }, 500);
             }
-        } catch (e) {
-            console.error('Failed to fetch points', e);
-        } finally {
-            setLoadingPoints(false);
+        } else if (paymentStatus === 'failure') {
+            const pendingData = localStorage.getItem('pending_upi_transaction');
+            if (pendingData) {
+                const parsed = JSON.parse(pendingData);
+                setCart(parsed.cart);
+                setMobileNumber(parsed.mobileNumber);
+                alert("Payment Failed: Please Try Again or use Cash");
+                localStorage.removeItem('pending_upi_transaction');
+                navigate('/pos', { replace: true }); // Clear search params
+            }
         }
-    };
-
-    const addRewardToCart = useCallback(() => {
-        setCart(prev => [...prev, {
-            id: 'reward-1',
-            name: '🎁 Free Priority Ride',
-            price: 0,
-            quantity: 1,
-            description: 'Loyalty Reward (100 Pts)'
-        }]);
-    }, []);
+    }, [navigate]);
 
     const syncOfflineTickets = async () => {
         setIsSyncing(true);
@@ -174,7 +238,7 @@ export default function POS() {
 
         if (pending.length === 0) return;
 
-        console.log(`Attempting to sync ${pending.length} tickets to ${API_URL || FALLBACK_API_URL}/api/tickets`);
+        console.log(`Attempting to sync ${pending.length} tickets to ${API_URL}/api/tickets`);
         setIsSyncing(true);
         try {
             await axios.post(`${API_URL}/api/tickets`, pending);
@@ -204,6 +268,8 @@ export default function POS() {
             }
             return [...prev, { ...ride, quantity: 1 }];
         });
+        // Tablet optimization: Take to cart immediately
+        setShowMobileCart(true);
     }, []);
 
     const updateQuantitySimple = useCallback((id: string, delta: number) => {
@@ -321,126 +387,78 @@ export default function POS() {
 
         setPrintData(newPrintData);
         setTicketsToSave(ticketsToSave);
-        setShowPrintPreview(true);
+
+        if (paymentMode === 'upi') {
+            // Freeze state into LocalStorage for retrieval after redirect
+            const pendingTransaction = {
+                cart,
+                printData: newPrintData,
+                ticketsToSave,
+                totalWithTax,
+                mobileNumber
+            };
+            localStorage.setItem('pending_upi_transaction', JSON.stringify(pendingTransaction));
+
+            try {
+                console.log('Initiating Easebuzz Payment...');
+                const safeProductInfo = cart.map(i => i.name.replace(/[^a-zA-Z0-9 ]/g, '')).join(' ').substring(0, 50) || 'POS_Rides';
+                const paymentInfo = {
+                    amount: totalWithTax.toFixed(2),
+                    txnid: newPrintData.id,
+                    productinfo: safeProductInfo,
+                    firstname: loggedUser.name?.split(' ')[0] || 'Customer',
+                    email: loggedUser.email || 'customer@ethree.in',
+                    phone: mobileNumber || '9999999999',
+                    surl: `${API_URL}/api/payments/response?status=success&returnUrl=${encodeURIComponent(window.location.origin + '/#/payment-success')}`,
+                    furl: `${API_URL}/api/payments/response?status=failure&returnUrl=${encodeURIComponent(window.location.origin + '/#/payment-failure')}`
+                };
+
+                const res = await axios.post(`${API_URL}/api/payments/initiate`, paymentInfo);
+                
+                if (res.data && res.data.url) {
+                    // Direct to Easebuzz
+                    window.location.href = res.data.url;
+                    return;
+                }
+            } catch (error) {
+                console.error('Payment initiation failed:', error);
+                alert('UPI Payment redirection failed. Please try Cash or check internet.');
+                localStorage.removeItem('pending_upi_transaction'); // Clean up on initiation error
+            }
+        } else {
+            // For Cash, show print preview
+            setShowPrintPreview(true);
+        }
     };
 
     const handlePreviewConfirm = async () => {
-        setShowPrintPreview(false);
+        if (paymentMode === 'cash' || !paymentMode) {
+            setShowPrintPreview(false);
+            
+            // 1. Trigger Print Immediately
+            setTimeout(() => {
+                window.print();
+                setShowSuccessModal(true);
+                setCart([]);
+                setPaymentMode(null);
+                setMobileNumber('');
+            }, 100);
 
-        // 1. Trigger Print Immediately (Fastest UX)
-        setTimeout(() => {
-            window.print();
-            setShowSuccessModal(true);
-            setCart([]);
-            setPaymentMode(null);
-            setMobileNumber('');
-        }, 100);
-
-        // 2. Save to Backend in Background (Non-blocking)
-        const saveToBackend = async () => {
-            try {
-                if (!isOnline) throw new Error('Offline');
-
-                // Bulk Save Tickets
-                await axios.post(`${API_URL}/api/tickets`, ticketsToSave);
-
-                // Process Loyalty
-                if (mobileNumber && mobileNumber.length === 10) {
-                    if (totalWithTax >= 100) {
-                        try {
-                            const loyaltyRes = await axios.post(`${API_URL}/api/loyalty/earn`, {
-                                mobile: mobileNumber,
-                                amount: totalWithTax,
-                                ticketId: printData?.id || ''
-                            });
-                            if (loyaltyRes.data.points !== undefined) {
-                                setLoyaltyPoints(loyaltyRes.data.points);
-                            }
-                        } catch (e) { }
-                    }
-                    const rewardItem = cart.find(i => i.id === 'reward-1');
-                    if (rewardItem) {
-                        for (let i = 0; i < rewardItem.quantity; i++) {
-                            try {
-                                await axios.post(`${API_URL}/api/loyalty/redeem`, { mobile: mobileNumber, ticketId: printData?.id || '' });
-                            } catch (e) { }
-                        }
-                    }
+            // 2. Save to Backend in Background
+            const saveToBackend = async () => {
+                try {
+                    if (!isOnline) throw new Error('Offline');
+                    await axios.post(`${API_URL}/api/tickets`, ticketsToSave);
+                } catch (error) {
+                    console.log('Background save failed, queueing locally.');
+                    const pending = JSON.parse(localStorage.getItem('pending_tickets') || '[]');
+                    ticketsToSave.forEach(t => pending.push(t));
+                    localStorage.setItem('pending_tickets', JSON.stringify(pending));
+                    setPendingCount(prev => prev + ticketsToSave.length);
                 }
-            } catch (error) {
-                console.log('Background save failed, queueing locally.');
-                const pending = JSON.parse(localStorage.getItem('pending_tickets') || '[]');
-                ticketsToSave.forEach(t => pending.push(t));
-                localStorage.setItem('pending_tickets', JSON.stringify(pending));
-                setPendingCount(prev => prev + ticketsToSave.length);
-            }
-        };
-
-        saveToBackend();
-    };
-
-    const handleReprint = async () => {
-        if (!printData) return;
-
-        // Security Feature: Generate NEW Ticket ID for reprints to prevent scams/reuse
-        // This forces the cashier to account for every printed slip as a new transaction in the system.
-        const newTicketId = `TXN-${Date.now().toString().slice(-8)}-${Math.floor(Math.random() * 1000)}`;
-        const date = new Date().toLocaleString();
-
-        const newTicketData = {
-            id: newTicketId,
-            amount: printData.total, // Fix: backend expects 'amount', printData has 'total'
-            date: date,
-            items: printData.items,
-            mobile: printData.mobile,
-            paymentMode: (printData.paymentMode || 'cash') as 'cash' | 'upi',
-            status: 'valid',
-            posId: loggedUser.posId || 'pos1',
-            createdAt: new Date().toISOString(),
-            isCoupon: false
-        };
-
-        // Handle SubTickets regeneration if needed
-        let newSubTickets: any[] = [];
-        if (printData.subTickets && printData.subTickets.length > 0) {
-            newSubTickets = printData.subTickets.map((t, index) => {
-                const suffix = t.id.includes('-C') ? 'C' : 'R';
-                return {
-                    ...t,
-                    id: `${newTicketId}-${suffix}${index + 1}`,
-                    parentId: newTicketId,
-                    date: date,
-                    createdAt: new Date().toISOString()
-                };
-            });
+            };
+            saveToBackend();
         }
-
-        const ticketsToSave = [newTicketData, ...newSubTickets];
-
-        // Update UI State for Printing
-        setPrintData({
-            ...printData, // Preserve items, earnedPoints, etc.
-            date: date,
-            id: newTicketId,
-            subTickets: newSubTickets
-        });
-
-        // Save New Transaction to Backend
-        try {
-            if (!isOnline) throw new Error('Offline');
-            await Promise.all(ticketsToSave.map(t => axios.post(`${API_URL}/api/tickets`, t)));
-        } catch (error) {
-            console.log('Backend unavailable during reprint, queueing locally.');
-            const pending = JSON.parse(localStorage.getItem('pending_tickets') || '[]');
-            ticketsToSave.forEach(t => pending.push(t));
-            localStorage.setItem('pending_tickets', JSON.stringify(pending));
-            setPendingCount(prev => prev + ticketsToSave.length);
-        }
-
-        // Wait for state update then print
-        setTimeout(() => {
-            window.print();
-        }, 100);
     };
 
     const closeSuccessModal = () => {
@@ -464,9 +482,9 @@ export default function POS() {
                             <div className="relative group">
                                 <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-500 to-amber-300 rounded-lg blur opacity-50 group-hover:opacity-100 transition duration-200"></div>
                                 <img
-                                    src="logo.jpeg"
+                                    src={`${IMAGE_URL}/logo.jpeg?ngrok-skip-browser-warning=1`}
                                     alt="ETHREE Logo"
-                                    className="relative w-10 h-10 md:w-12 md:h-12 rounded-lg object-contain bg-white ring-1 ring-slate-900"
+                                    className="relative w-10 h-10 md:w-12 md:h-12 rounded-lg object-contain bg-white ring-1 ring-slate-900 p-1.5"
                                 />
                             </div>
                             <div>
@@ -499,6 +517,26 @@ export default function POS() {
                                         <RefreshCw size={10} className={isSyncing ? "animate-spin" : ""} />
                                         <span>{pendingCount}</span>
                                     </div>
+                                )}
+
+                                {/* Bluetooth Printer Pairing */}
+                                <button 
+                                    onClick={btStatus === 'connected' ? disconnectBluetooth : connectBluetooth}
+                                    className={`px-2 py-0.5 md:py-1 rounded-full text-[10px] md:text-xs font-bold flex items-center gap-1.5 border transition-all active:scale-95 backdrop-blur-sm ${
+                                        btStatus === 'connected' 
+                                        ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' 
+                                        : 'bg-slate-800/50 text-slate-400 border-slate-700 hover:bg-slate-800'
+                                    }`}
+                                >
+                                    <Printer size={12} className={isBTConnecting ? 'animate-bounce' : ''} />
+                                    <span>
+                                        {isBTConnecting ? 'PAIRING...' : btStatus === 'connected' ? (localStorage.getItem('bt_printer_name')?.substring(0, 8) || 'PAIRED') : 'PAIR PRINTER'}
+                                    </span>
+                                </button>
+                                {btError && (
+                                    <span className="text-[8px] text-rose-500 font-bold uppercase tracking-tighter opacity-70">
+                                        ERR: {btError}
+                                    </span>
                                 )}
                             </div>
                         </div>
@@ -551,9 +589,34 @@ export default function POS() {
                                         </button>
                                     </div>
                                 ) : (
-                                    rides.map(ride => (
-                                        <RideCard key={ride._id || ride.id} ride={ride} onAdd={addToCart} />
-                                    ))
+                                    <>
+                                        {rides
+                                            .filter(ride => showAllRides || FEATURED_RIDE_NAMES.includes(ride.name.toUpperCase()))
+                                            .map(ride => (
+                                                <RideCard key={ride._id || ride.id} ride={ride} onAdd={addToCart} />
+                                            ))}
+                                        {rides.length > rides.filter(ride => FEATURED_RIDE_NAMES.includes(ride.name.toUpperCase())).length && (
+                                            <button
+                                                onClick={() => setShowAllRides(!showAllRides)}
+                                                className="flex flex-col items-center justify-center p-4 rounded-3xl border-2 border-dashed border-slate-300 bg-white/50 hover:bg-white hover:border-amber-400 transition-all group overflow-hidden relative"
+                                            >
+                                                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                                <div className="p-3 bg-slate-100 rounded-2xl mb-3 group-hover:bg-amber-100 transition-colors">
+                                                    {showAllRides ? (
+                                                        <X size={24} className="text-slate-400 group-hover:text-amber-600" />
+                                                    ) : (
+                                                        <RefreshCw size={24} className="text-slate-400 group-hover:text-amber-600" />
+                                                    )}
+                                                </div>
+                                                <span className="text-xs font-black text-slate-500 group-hover:text-amber-700 uppercase tracking-widest text-center">
+                                                    {showAllRides ? 'Show Less' : 'Show More Rides'}
+                                                </span>
+                                                <div className="mt-1 text-[10px] font-bold text-slate-400">
+                                                    {showAllRides ? 'HIDE OPTIONS' : `${rides.length - rides.filter(r => FEATURED_RIDE_NAMES.includes(r.name.toUpperCase())).length} MORE AVAILABLE`}
+                                                </div>
+                                            </button>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         </div>
@@ -570,10 +633,6 @@ export default function POS() {
                             onPaymentModeChange={setPaymentMode}
                             mobileNumber={mobileNumber}
                             onMobileNumberChange={setMobileNumber}
-                            loyaltyPoints={loyaltyPoints}
-                            loadingPoints={loadingPoints}
-                            onAddReward={addRewardToCart}
-                            hasReward={!!cart.find(i => i.id === 'reward-1')}
                         />
                     </div>
                 </main>
@@ -618,10 +677,6 @@ export default function POS() {
                                 onPaymentModeChange={setPaymentMode}
                                 mobileNumber={mobileNumber}
                                 onMobileNumberChange={setMobileNumber}
-                                loyaltyPoints={loyaltyPoints}
-                                loadingPoints={loadingPoints}
-                                onAddReward={addRewardToCart}
-                                hasReward={!!cart.find(i => i.id === 'reward-1')}
                             />
                         </div>
                     </div>
@@ -798,13 +853,7 @@ export default function POS() {
                         </div>
 
                         {/* Footer Actions */}
-                        <div className="p-6 border-t border-slate-100 bg-white rounded-b-3xl grid grid-cols-2 gap-4">
-                            <button
-                                onClick={() => setShowPrintPreview(false)}
-                                className="w-full px-4 py-4 bg-slate-100 text-slate-600 font-black rounded-2xl hover:bg-slate-200 transition-all active:scale-[0.98] uppercase text-xs tracking-widest border border-slate-200"
-                            >
-                                Cancel / Edit
-                            </button>
+                        <div className="p-6 border-t border-slate-100 bg-white rounded-b-3xl">
                             <button
                                 onClick={handlePreviewConfirm}
                                 className="w-full px-4 py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-500 transition-all shadow-xl shadow-emerald-500/20 active:scale-[0.98] flex items-center justify-center gap-3 uppercase text-xs tracking-widest"
@@ -842,13 +891,6 @@ export default function POS() {
                                 className="w-full px-4 py-3.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20 text-lg active:scale-[0.98]"
                             >
                                 Done
-                            </button>
-                            <button
-                                onClick={handleReprint}
-                                className="w-full px-4 py-3 bg-white text-slate-700 font-bold rounded-xl border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors text-base flex items-center justify-center gap-2"
-                            >
-                                <RefreshCw size={18} />
-                                Reprint Ticket
                             </button>
                         </div>
                     </div>

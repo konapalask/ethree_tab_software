@@ -1,4 +1,0 @@
-Pushing to https://github.com/efoureluru/software
-To https://github.com/efoureluru/software
- = [up to date]      main -> main
-Everything up-to-date

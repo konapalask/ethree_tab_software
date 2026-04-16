@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 // Override the standard local API_URL with the public cloud API for all Admin actions
-import { API_URL } from '../api/config';
+import { API_URL, IMAGE_URL } from '../api/config';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Save, Trash2, RefreshCw, Pencil, X } from 'lucide-react';
 
@@ -45,8 +45,19 @@ export default function RideManagement() {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setRides(response.data);
+            // Cache the data for fallback use
+            localStorage.setItem('cached_rides', JSON.stringify(response.data));
         } catch (error) {
-            console.error('Failed to fetch rides', error);
+            console.error('Failed to fetch rides, checking local cache...', error);
+            const cached = localStorage.getItem('cached_rides');
+            if (cached) {
+                try {
+                    setRides(JSON.parse(cached));
+                    console.log('Loaded rides from cache');
+                } catch (e) {
+                    console.error('Failed to parse cache', e);
+                }
+            }
         } finally {
             setLoading(false);
         }
@@ -248,7 +259,11 @@ export default function RideManagement() {
                             <div key={ride._id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
                                 <div className="h-40 bg-slate-100 relative group">
                                     {ride.image ? (
-                                        <img src={ride.image} alt={ride.name} className="w-full h-full object-cover" />
+                                        <img 
+                                            src={`${IMAGE_URL}/${ride.image}?ngrok-skip-browser-warning=1`} 
+                                            alt={ride.name} 
+                                            className="w-full h-full object-cover" 
+                                        />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center text-slate-300">
                                             No Image

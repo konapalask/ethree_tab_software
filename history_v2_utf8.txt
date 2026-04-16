@@ -1,5 +1,0 @@
-﻿083d7be UI & Bugfix: Fix ticket verification crash and chart rendering issues
-487336f Backend: Synchronize server/index.js and api/index.js for consistency
-04b939e Backend: Improve health check and error reporting for debugging
-b79bc82 UI: Reduce login logo size for better balance
-85decb5 UI: Make login logo full-width bleed to remove box effect

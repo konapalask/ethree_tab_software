@@ -2,6 +2,8 @@ import { memo } from 'react';
 import type { Ride } from '../data/rides';
 import { Trash2, Printer, ShoppingCart, Banknote, Smartphone } from 'lucide-react';
 
+import { IMAGE_URL } from '../api/config';
+
 interface CartItem extends Ride {
     quantity: number;
 }
@@ -15,10 +17,6 @@ interface CartProps {
     onPaymentModeChange: (mode: 'cash' | 'upi') => void;
     mobileNumber: string;
     onMobileNumberChange: (val: string) => void;
-    loyaltyPoints: number | null;
-    loadingPoints: boolean;
-    onAddReward: () => void;
-    hasReward: boolean;
 }
 
 export const Cart = memo(function Cart({
@@ -29,11 +27,7 @@ export const Cart = memo(function Cart({
     paymentMode,
     onPaymentModeChange,
     mobileNumber,
-    onMobileNumberChange,
-    loyaltyPoints,
-    loadingPoints,
-    onAddReward,
-    hasReward
+    onMobileNumberChange
 }: CartProps) {
     const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const count = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -67,7 +61,13 @@ export const Cart = memo(function Cart({
                     items.map((item) => (
                         <div key={item._id || item.id} className="group flex gap-3 items-start bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-200">
                             <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 shrink-0 relative">
-                                {item.image && <img src={item.image} alt="" className="w-full h-full object-cover" />}
+                                {item.image && (
+                                    <img 
+                                        src={`${IMAGE_URL}/${item.image}?ngrok-skip-browser-warning=1`} 
+                                        alt="" 
+                                        className="w-full h-full object-cover" 
+                                    />
+                                )}
                             </div>
                             <div className="flex-1 min-w-0 py-1">
                                 <h4 className="font-bold text-slate-900 text-sm truncate pr-2">{item.name}</h4>
@@ -107,27 +107,6 @@ export const Cart = memo(function Cart({
                                 value={mobileNumber}
                                 onChange={(e) => onMobileNumberChange(e.target.value.replace(/\D/g, '').slice(0, 10))}
                             />
-
-                            {mobileNumber.length === 10 && (
-                                <div className="p-2 bg-indigo-50 border border-indigo-100 rounded-lg animate-in fade-in slide-in-from-top-1">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-[10px] font-bold text-indigo-900 uppercase">Points</span>
-                                        {loadingPoints ? (
-                                            <div className="animate-spin text-indigo-500 w-3 h-3 border-2 border-current border-t-transparent rounded-full" />
-                                        ) : (
-                                            <span className="text-sm font-black text-indigo-600">{loyaltyPoints !== null ? loyaltyPoints : 0}</span>
-                                        )}
-                                    </div>
-                                    {(loyaltyPoints || 0) >= 100 && !hasReward && (
-                                        <button
-                                            onClick={onAddReward}
-                                            className="w-full mt-1.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded shadow-sm transition-colors"
-                                        >
-                                            Redeem Free Ride
-                                        </button>
-                                    )}
-                                </div>
-                            )}
                         </div>
 
                         {/* Payment Mode */}

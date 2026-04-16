@@ -1,4 +1,0 @@
-﻿083d7be9111886d6d4e7fc8916c858072a066f4f	HEAD
-083d7be9111886d6d4e7fc8916c858072a066f4f	refs/heads/main
-9e799dbf620a3de0da7b0fbe6bd3d5f27bb23f92	refs/heads/master
-397f3977d828ba1eada155da2ba6d418b0c5a315	refs/heads/vercel-deploy
