@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 // Override the standard local API_URL with the public cloud API for all Admin actions
-import { API_URL, IMAGE_URL } from '../api/config';
+import { API_URL } from '../api/config';
 import { useNavigate } from 'react-router-dom';
 import { Download, LogOut, RefreshCw, Receipt, Search, Trash2, AlertTriangle, BarChart3, List, Users } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
@@ -328,7 +328,7 @@ export default function AdminDashboard() {
                         <div className="relative group">
                             <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-cyan-300 rounded-lg blur opacity-50 group-hover:opacity-100 transition duration-200"></div>
                             <img
-                                src={`${IMAGE_URL}/logo.jpeg`}
+                                src="/logo.jpeg"
                                 alt="ETHREE Logo"
                                 className="relative w-10 h-10 md:w-12 md:h-12 rounded-lg object-contain bg-white ring-1 ring-slate-900"
                             />
