@@ -8,6 +8,7 @@ import { Ticket as TicketIcon, LogOut, WifiOff, RefreshCw, Printer, X } from 'lu
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../api/config';
+import { BluetoothPrinter } from '../api/BluetoothPrinter';
 
 interface CartItem extends Ride {
     quantity: number;
@@ -71,26 +72,16 @@ export default function POS() {
     });
 
     const connectBluetooth = async () => {
-        // Feature detection for Web Bluetooth API
-        if (!('bluetooth' in navigator)) {
-            alert('Bluetooth Error: Your browser does not support Bluetooth pairing. Please use Google Chrome or Microsoft Edge on a compatible device.');
-            setBtStatus('error');
-            return;
-        }
-
         setIsBTConnecting(true);
         try {
-            const device = await (navigator as any).bluetooth.requestDevice({
-                acceptAllDevices: true,
-                optionalServices: ['0000180a-0000-1000-8000-00805f9b34fb'] // Generic access or common printer services
-            });
+            const printerName = await BluetoothPrinter.connect();
             
-            console.log('Bluetooth Device Selected:', device.name);
+            console.log('Bluetooth Device Selected:', printerName);
             setBtStatus('connected');
             setBtError(null);
             localStorage.setItem('bt_printer_paired', 'true');
-            localStorage.setItem('bt_printer_name', device.name || 'Unknown Printer');
-            alert(`Printer "${device.name}" Paired Successfully!`);
+            localStorage.setItem('bt_printer_name', printerName);
+            alert(`Printer "${printerName}" Ready for Direct Printing!`);
         } catch (error: any) {
             console.error('Bluetooth Connection Failed:', error);
             setBtStatus('error');
@@ -442,14 +433,49 @@ export default function POS() {
         if (paymentMode === 'cash' || !paymentMode) {
             setShowPrintPreview(false);
             
-            // 1. Trigger Print Immediately
-            setTimeout(() => {
+            // 1. Trigger Print
+            if (btStatus === 'connected' && printData) {
+                try {
+                    console.log('Using Built-in Bluetooth Printer...');
+                    // Print Master/Individual tickets via direct ESC/POS
+                    await BluetoothPrinter.printTicket({
+                        id: printData.id,
+                        date: printData.date,
+                        items: printData.items,
+                        total: printData.total,
+                        mobile: printData.mobile
+                    });
+                    
+                    // If there are sub-tickets (Combo), print them too
+                    if (printData.subTickets && printData.subTickets.length > 0) {
+                        for (const sub of printData.subTickets) {
+                            await BluetoothPrinter.printTicket({
+                                id: sub.id,
+                                date: sub.date,
+                                items: sub.items,
+                                total: sub.amount,
+                                mobile: sub.mobile
+                            });
+                        }
+                    }
+                    
+                    setShowSuccessModal(true);
+                    setCart([]);
+                    setPaymentMode(null);
+                    setMobileNumber('');
+                } catch (printErr: any) {
+                    console.error('Direct Print Failed, falling back to window.print', printErr);
+                    window.print();
+                    setShowSuccessModal(true);
+                }
+            } else {
+                // Legacy Browser Print
                 window.print();
                 setShowSuccessModal(true);
                 setCart([]);
                 setPaymentMode(null);
                 setMobileNumber('');
-            }, 100);
+            }
 
             // 2. Save to Backend in Background
             const saveToBackend = async () => {
