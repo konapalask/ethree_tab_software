@@ -16,10 +16,9 @@ export const API_URL = envApiUrl || LOCAL_BACKEND;
 /**
  * Image Base URL
  * 
- * In most local setups with ngrok, assets are served from the root.
- * We remove the '/images' prefix to avoid 404s if the backend
- * serves static files from a 'public' directory.
+ * Your local server likely serves static files from an '/images' subfolder.
+ * We restore this prefix to avoid 404 errors for the logo and ride images.
  */
-export const IMAGE_URL = API_URL;
+export const IMAGE_URL = `${API_URL}/images`;
 
 export default API_URL;
