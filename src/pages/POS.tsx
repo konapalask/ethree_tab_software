@@ -682,7 +682,7 @@ export default function POS() {
                                     </div>
                                 )}
 
-                                {/* Bluetooth Printer Pairing */}
+                                 {/* Bluetooth Printer Pairing */}
                                 <button 
                                     onClick={btStatus === 'connected' ? disconnectBluetooth : connectBluetooth}
                                     className={`px-2 py-0.5 md:py-1 rounded-full text-[10px] md:text-xs font-bold flex items-center gap-1.5 border transition-all active:scale-95 backdrop-blur-sm ${
@@ -703,6 +703,14 @@ export default function POS() {
                                         ERR: {btError}
                                     </span>
                                 )}
+                                
+                                {/* Developer Credit */}
+                                <div className="hidden xl:flex flex-col border-l border-white/10 pl-4 ml-2">
+                                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] leading-none mb-1 text-slate-500">Architecture</span>
+                                    <span className="text-[9px] font-black text-white/90 tracking-widest uppercase">
+                                        Designed & Developed by <span className="text-amber-400">Stackvil Technologies</span>
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
