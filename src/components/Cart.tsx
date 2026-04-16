@@ -56,7 +56,7 @@ export const Cart = memo(function Cart({
     const count = items.reduce((sum, item) => sum + item.quantity, 0);
 
     return (
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 flex flex-col h-full sticky top-24 overflow-hidden ring-1 ring-slate-900/5">
+        <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 flex flex-col h-full overflow-hidden ring-1 ring-slate-900/5">
             <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center backdrop-blur-sm">
                 <div className="flex items-center gap-3 text-slate-800">
                     <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-100/50">
