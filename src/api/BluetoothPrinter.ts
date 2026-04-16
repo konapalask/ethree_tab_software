@@ -35,6 +35,7 @@ class BluetoothPrinterService {
         ALIGN_RIGHT: new Uint8Array([0x1B, 0x61, 0x02]),
         FEED_CUT: new Uint8Array([0x1D, 0x56, 0x41, 0x10]), // Feed and Cut
         LARGE_TEXT: new Uint8Array([0x1D, 0x21, 0x11]), // Double width and height
+        DOUBLE_SIZE: new Uint8Array([0x1D, 0x21, 0x11]), // Double width and height
         NORMAL_TEXT: new Uint8Array([0x1D, 0x21, 0x00]),
     };
 
@@ -44,6 +45,11 @@ class BluetoothPrinterService {
     async connect(): Promise<string> {
         try {
             if (!(navigator as any).bluetooth) {
+                // Check if this is a Median App
+                const isMedian = navigator.userAgent.includes('Median');
+                if (isMedian) {
+                    throw new Error('Median App detected. Please ensure the "Web Bluetooth" plugin is enabled in your Median.co dashboard.');
+                }
                 throw new Error('Bluetooth not supported on this browser.');
             }
 
@@ -173,9 +179,16 @@ class BluetoothPrinterService {
             await this.write(this.COMMANDS.BOLD_ON);
             await this.write(encoder.encode(`TOTAL PAYABLE: INR ${data.total}\n`));
             await this.write(this.COMMANDS.BOLD_OFF);
-            if (data.paymentMode) await this.write(encoder.encode(`Mode: ${data.paymentMode.toUpperCase()}\n`));
             
-            // 6. Footer
+            // 6. Prominent Payment Mode (HIGHLIGHTED)
+            if (data.paymentMode) {
+                await this.write(this.COMMANDS.ALIGN_CENTER);
+                await this.write(this.COMMANDS.DOUBLE_SIZE);
+                await this.write(encoder.encode(`\n*** ${data.paymentMode.toUpperCase()} ***\n`));
+                await this.write(this.COMMANDS.NORMAL_TEXT);
+            }
+            
+            // 7. Footer
             await this.write(this.COMMANDS.ALIGN_CENTER);
             await this.write(encoder.encode("\nWWW.ETHREE.IN\n"));
             await this.write(encoder.encode("Thank You! Visit Again\n"));

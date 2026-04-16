@@ -454,7 +454,8 @@ export default function POS() {
                         date: printData.date,
                         items: printData.items,
                         total: printData.total,
-                        mobile: printData.mobile
+                        mobile: printData.mobile,
+                        paymentMode: paymentMode || 'cash'
                     });
                     
                     // If there are sub-tickets (Combo), print them too
@@ -465,18 +466,29 @@ export default function POS() {
                                 date: sub.date,
                                 items: sub.items,
                                 total: sub.amount,
-                                mobile: sub.mobile
+                                mobile: sub.mobile,
+                                paymentMode: paymentMode || 'cash'
                             });
                         }
                     }
                     
-                    setShowSuccessModal(true);
-                    setCart([]);
-                    setPaymentMode(null);
-                    setMobileNumber('');
+                    // KEEP PREVIEW VISIBLE for 2 seconds so they can see the "CASH" highlight
+                    setTimeout(() => {
+                        setShowPrintPreview(false);
+                        setShowSuccessModal(true);
+                        setCart([]);
+                        setPaymentMode(null);
+                        setMobileNumber('');
+                    }, 2000);
+                    
                 } catch (printErr: any) {
                     console.error('Direct Print Failed, falling back to window.print', printErr);
+                    // Check if is Median
+                    if (navigator.userAgent.includes('Median')) {
+                        alert("App Connection Error: Please ensure 'Web Bluetooth' is enabled in your Median App settings.");
+                    }
                     window.print();
+                    setShowPrintPreview(false);
                     setShowSuccessModal(true);
                 }
             } else if (btStatus === 'paired_not_linked') {
