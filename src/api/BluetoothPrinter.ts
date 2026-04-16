@@ -191,7 +191,7 @@ class BluetoothPrinterService {
             // 7. Footer
             await this.write(this.COMMANDS.ALIGN_CENTER);
             await this.write(encoder.encode("\nWWW.ETHREE.IN\n"));
-            await this.write(encoder.encode("Support: +91 88864 71111\n"));
+            await this.write(encoder.encode("Support: +91 70369 23456\n"));
             await this.write(encoder.encode("Thank You! Visit Again\n"));
             
             // 7. Cut
