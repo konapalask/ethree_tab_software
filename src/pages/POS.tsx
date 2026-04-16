@@ -32,7 +32,7 @@ export default function POS() {
     });
 
     const [showAllRides, setShowAllRides] = useState(false);
-    const FEATURED_RIDE_NAMES = ['ETHREE BUS', 'SUN @ MOON', 'TL TRAIN'];
+    const FEATURED_RIDE_NAMES = ['ETHREE BUS', 'SUN @ MOON', 'TL TRAIN', 'BALLOON SHOOTING'];
 
     // Save settings to localStorage whenever they change
     useEffect(() => {
@@ -749,7 +749,7 @@ export default function POS() {
                                 <span className="w-1.5 h-6 md:h-8 bg-gradient-to-b from-amber-400 to-amber-600 rounded-full shadow-sm"></span>
                                 Available Rides
                             </h2>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 pb-24 md:pb-0">
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 pb-24 md:pb-0">
                                 {loadingRides ? (
                                     <div className="col-span-full py-10 flex flex-col items-center justify-center text-slate-400">
                                         <RefreshCw size={32} className="animate-spin mb-2" />

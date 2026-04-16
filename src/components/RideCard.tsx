@@ -29,7 +29,7 @@ export const RideCard = memo(function RideCard({ ride, onAdd }: RideCardProps) {
 
     return (
         <div className="group relative bg-white rounded-xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-slate-100 overflow-hidden flex flex-col h-full">
-            <div className="h-56 overflow-hidden relative">
+            <div className="h-44 overflow-hidden relative">
                 {imageSrc ? (
                     <img
                         src={imageSrc}
@@ -45,8 +45,8 @@ export const RideCard = memo(function RideCard({ ride, onAdd }: RideCardProps) {
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent opacity-80" />
 
                 <div className="absolute bottom-1.5 left-2 right-2 flex items-end justify-between">
-                    <h3 className="font-bold text-lg text-white leading-tight shadow-sm drop-shadow-md">{ride.name}</h3>
-                    <span className="bg-amber-400 text-slate-900 text-sm font-bold px-2 py-1 rounded shadow-lg shadow-black/20">
+                    <h3 className="font-bold text-base text-white leading-tight shadow-sm drop-shadow-md">{ride.name}</h3>
+                    <span className="bg-amber-400 text-slate-900 text-xs font-bold px-1.5 py-0.5 rounded shadow-lg shadow-black/20">
                         ₹{ride.price}
                     </span>
                 </div>
@@ -58,10 +58,10 @@ export const RideCard = memo(function RideCard({ ride, onAdd }: RideCardProps) {
                 <div className="mt-auto">
                     <button
                         onClick={() => onAdd(ride)}
-                        className="w-full bg-slate-50 hover:bg-slate-900 text-slate-700 hover:text-amber-400 border border-slate-200 hover:border-slate-900 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 group/btn text-sm"
+                        className="w-full bg-slate-50 hover:bg-slate-900 text-slate-700 hover:text-amber-400 border border-slate-200 hover:border-slate-900 font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 group/btn text-xs"
                     >
-                        <span className="bg-slate-200 group-hover/btn:bg-amber-400 p-1 rounded-full transition-colors">
-                            <Plus size={14} className="text-slate-600 group-hover/btn:text-slate-900" />
+                        <span className="bg-slate-200 group-hover/btn:bg-amber-400 p-0.5 rounded-full transition-colors">
+                            <Plus size={12} className="text-slate-600 group-hover/btn:text-slate-900" />
                         </span>
                         Add to Order
                     </button>
