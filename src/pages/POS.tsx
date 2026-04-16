@@ -448,17 +448,10 @@ export default function POS() {
             if (btStatus === 'connected' && printData && BluetoothPrinter.isConnected) {
                 try {
                     console.log('Using Built-in Bluetooth Printer...');
-                    // Print Master/Individual tickets via direct ESC/POS
-                    await BluetoothPrinter.printTicket({
-                        id: printData.id,
-                        date: printData.date,
-                        items: printData.items,
-                        total: printData.total,
-                        mobile: printData.mobile,
-                        paymentMode: paymentMode || 'cash'
-                    });
+                    // SKIPPING Master Receipt printing to avoid double-papers
+                    // Individual tickets loop below will handle all coupons
                     
-                    // If there are sub-tickets (Combo), print them too
+                    // If there are sub-tickets (Individual Rides/Combo), print them
                     if (printData.subTickets && printData.subTickets.length > 0) {
                         for (const sub of printData.subTickets) {
                             await BluetoothPrinter.printTicket({
