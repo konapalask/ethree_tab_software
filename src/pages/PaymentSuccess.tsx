@@ -41,6 +41,14 @@ export default function PaymentSuccess() {
 
         handleSuccess();
 
+        // AUTO-CLOSE if in Popup mode (Handover back to POS)
+        if (window.opener) {
+            console.log('Detected Popup Mode - Auto-closing in 5 seconds...');
+            setTimeout(() => {
+                window.close();
+            }, 5000);
+        }
+
         return () => window.removeEventListener('popstate', handleBack);
     }, []);
 

@@ -4,7 +4,7 @@ import { RideCard } from '../components/RideCard';
 import { Cart } from '../components/Cart';
 import { Ticket } from '../components/Ticket';
 // TicketVerifier removed
-import { Ticket as TicketIcon, LogOut, WifiOff, RefreshCw, Printer, X } from 'lucide-react';
+import { Ticket as TicketIcon, LogOut, WifiOff, RefreshCw, Printer, X, Smartphone } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../api/config';
@@ -71,6 +71,9 @@ export default function POS() {
         const isPaired = localStorage.getItem('bt_printer_paired') === 'true';
         return isPaired ? 'paired_not_linked' : 'disconnected';
     });
+    const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
+    const [pollingTxnId, setPollingTxnId] = useState<string | null>(null);
+    const [isPrinting, setIsPrinting] = useState(false);
 
     // Sync actual Bluetooth connection status with UI
     useEffect(() => {
@@ -185,6 +188,73 @@ export default function POS() {
             window.removeEventListener('offline', handleOffline);
         };
     }, []);
+
+    // POLLLING: Check for UPI Success and Auto-Print
+    useEffect(() => {
+        let pollInterval: any;
+
+        if (isWaitingForPayment && pollingTxnId) {
+            console.log(`Starting polling for transaction: ${pollingTxnId}`);
+            
+            pollInterval = setInterval(async () => {
+                try {
+                    // Try to fetch the ticket from backend to see if it was saved (Success)
+                    // We also fetch all recent tickets to see if our ID is there
+                    const token = localStorage.getItem('token');
+                    const response = await axios.get(`${API_URL}/api/tickets`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    
+                    const found = response.data.find((t: any) => t.id === pollingTxnId);
+                    
+                    if (found) {
+                        console.log('Payment SUCCESS detected via Polling!');
+                        clearInterval(pollInterval);
+                        setIsWaitingForPayment(false);
+                        
+                        // AUTO-PRINT Logic
+                        if (BluetoothPrinter.isConnected) {
+                            setIsPrinting(true);
+                            try {
+                                // Print individual tickets saved in our local state
+                                if (printData && printData.subTickets) {
+                                    for (const sub of printData.subTickets) {
+                                        await BluetoothPrinter.printTicket({
+                                            id: sub.id,
+                                            date: sub.date,
+                                            items: sub.items,
+                                            total: sub.amount,
+                                            mobile: sub.mobile,
+                                            paymentMode: 'upi'
+                                        });
+                                    }
+                                }
+                            } catch (printError) {
+                                console.error('Auto-print failed:', printError);
+                                alert('Payment Success! But printer failed. Please reprint manually.');
+                            } finally {
+                                setIsPrinting(false);
+                            }
+                        }
+
+                        // Success cleanup
+                        setCart([]);
+                        setMobileNumber('');
+                        localStorage.removeItem('pending_upi_transaction');
+                        setPollingTxnId(null);
+                        
+                        // Close any stray popups? Usually the popup closes itself via our redirect
+                    }
+                } catch (err) {
+                    console.warn('Polling error (expected if not yet synced):', err);
+                }
+            }, 3000); // Poll every 3 seconds
+        }
+
+        return () => {
+            if (pollInterval) clearInterval(pollInterval);
+        };
+    }, [isWaitingForPayment, pollingTxnId, printData]);
 
     // Auto-Sync when Online
     useEffect(() => {
@@ -434,8 +504,21 @@ export default function POS() {
                 const res = await axios.post(`${API_URL}/api/payments/initiate`, paymentInfo);
                 
                 if (res.data && res.data.url) {
-                    // Direct to Easebuzz
-                    window.location.href = res.data.url;
+                    // SECURE PERSISTENT FLOW: Use Popup instead of redirect
+                    // This keeps the POS (and Bluetooth GATT session) alive
+                    const width = 600;
+                    const height = 800;
+                    const left = (window.innerWidth / 2) - (width / 2);
+                    const top = (window.innerHeight / 2) - (height / 2);
+                    
+                    window.open(
+                        res.data.url, 
+                        'EasebuzzPayment', 
+                        `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes`
+                    );
+
+                    setPollingTxnId(newPrintData.id);
+                    setIsWaitingForPayment(true);
                     return;
                 }
             } catch (error) {
@@ -957,6 +1040,67 @@ export default function POS() {
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+            {/* PAYMENT WAITING OVERLAY */}
+            {isWaitingForPayment && (
+                <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="max-w-md w-full bg-slate-800 border border-white/10 rounded-[2.5rem] p-10 text-center shadow-2xl relative overflow-hidden">
+                        {/* Animated background glow */}
+                        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-500 via-blue-500 to-emerald-500 animate-pulse"></div>
+                        
+                        <div className="relative mb-8 pt-4">
+                            <div className="w-24 h-24 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto relative">
+                                <RefreshCw className="w-12 h-12 text-blue-400 animate-spin" />
+                                <div className="absolute inset-0 bg-blue-400/20 rounded-full animate-ping"></div>
+                            </div>
+                        </div>
+
+                        <h2 className="text-3xl font-black text-white uppercase tracking-tight mb-2">Awaiting Payment</h2>
+                        <p className="text-slate-400 font-bold text-sm mb-8 leading-relaxed">
+                            A secure payment window has opened.<br/>
+                            Ask the customer to complete the transaction on their device.
+                        </p>
+
+                        <div className="space-y-4">
+                            <div className="p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center gap-4 text-left">
+                                <div className="p-3 bg-emerald-500/20 rounded-xl">
+                                    <Smartphone className="w-6 h-6 text-emerald-500" />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Transaction Status</p>
+                                    <p className="text-white font-bold">Scanning for Success...</p>
+                                </div>
+                            </div>
+                            
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => {
+                                        setIsWaitingForPayment(false);
+                                        setPollingTxnId(null);
+                                    }}
+                                    className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-slate-400 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all"
+                                >
+                                    Cancel Search
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        // Force check
+                                    }}
+                                    className="flex-1 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all shadow-lg shadow-blue-600/20"
+                                >
+                                    Force Sync
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isPrinting && (
+                <div className="fixed top-8 right-8 z-[200] bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest shadow-2xl flex items-center gap-4 animate-in slide-in-from-right duration-500">
+                    <Printer className="animate-bounce" />
+                    PRINTING TICKETS...
                 </div>
             )}
         </div>
