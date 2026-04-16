@@ -12,15 +12,20 @@ export const RideCard = memo(function RideCard({ ride, onAdd }: RideCardProps) {
     const [imageSrc, setImageSrc] = useState<string | null>(null);
 
     useEffect(() => {
-        // Stagger the loading of ride images to avoid flooding the ngrok tunnel connection limit
-        // Random delay between 100ms and 2000ms
-        const delay = Math.floor(Math.random() * 1900) + 100;
-        const timer = setTimeout(() => {
-            setImageSrc(`${IMAGE_URL}/${ride.image}?ngrok-skip-browser-warning=true`);
-        }, delay);
-
-        return () => clearTimeout(timer);
+        // Step 1: Try to load from the LOCAL public folder first (which is 100% reliable)
+        const localPath = `/rides/${ride.image}`;
+        
+        // We set the local path immediately. If it fails (404), the onError handler will catch it.
+        setImageSrc(localPath);
     }, [ride.image]);
+
+    // Fallback logic if the local image is missing
+    const handleImageError = () => {
+        if (imageSrc !== `${IMAGE_URL}/${ride.image}?ngrok-skip-browser-warning=true`) {
+            console.log(`Local image missing for ${ride.name}, falling back to proxy...`);
+            setImageSrc(`${IMAGE_URL}/${ride.image}?ngrok-skip-browser-warning=true`);
+        }
+    };
 
     return (
         <div className="group relative bg-white rounded-xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-slate-100 overflow-hidden flex flex-col h-full">
@@ -29,7 +34,7 @@ export const RideCard = memo(function RideCard({ ride, onAdd }: RideCardProps) {
                     <img
                         src={imageSrc}
                         alt={ride.name}
-                        loading="lazy"
+                        onError={handleImageError}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                     />
                 ) : (
