@@ -48,7 +48,7 @@ export default function Login() {
             {/* Background Image */}
             <div
                 className="absolute inset-0 bg-cover bg-center"
-                style={{ backgroundImage: `url('${IMAGE_URL}/blur-background-vibrant-ferris-wheel-600nw-2588560711.webp?ngrok-skip-browser-warning=1')` }}
+                style={{ backgroundImage: `url('${IMAGE_URL}/blur-background-vibrant-ferris-wheel-600nw-2588560711.webp')` }}
             ></div>
             <div className="absolute inset-0 bg-gradient-to-br from-purple-900/40 to-slate-900/60 backdrop-blur-[2px]"></div>
 
@@ -56,7 +56,7 @@ export default function Login() {
                 <div className="p-8 pt-10">
                     <div className="flex justify-center mb-6">
                         <img
-                            src={`${IMAGE_URL}/logo.jpeg?ngrok-skip-browser-warning=1`}
+                            src={`${IMAGE_URL}/logo.jpeg`}
                             alt="ETHREE Logo"
                             className="w-56 h-auto object-contain hover:scale-105 transition-transform duration-700"
                         />
