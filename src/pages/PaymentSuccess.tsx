@@ -1,11 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, Printer, Home, ShoppingBag } from 'lucide-react';
+import { CheckCircle2, Printer, Home, ShoppingBag, Bluetooth, RefreshCw } from 'lucide-react';
 import axios from 'axios';
 import { API_URL } from '../api/config';
+import { BluetoothPrinter } from '../api/BluetoothPrinter';
 
 export default function PaymentSuccess() {
     const navigate = useNavigate();
+    const [btStatus, setBtStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+    const [isConnecting, setIsConnecting] = useState(false);
+    const [lastPrintData, setLastPrintData] = useState<any>(null);
 
     useEffect(() => {
         // 1. History Trap - Block Back Button
@@ -19,18 +23,14 @@ export default function PaymentSuccess() {
             const pendingData = localStorage.getItem('pending_upi_transaction');
             if (pendingData) {
                 const parsed = JSON.parse(pendingData);
+                setLastPrintData(parsed.printData);
                 
                 try {
                     // 1. Sync to backend
                     await axios.post(`${API_URL}/api/tickets`, parsed.ticketsToSave);
                     
-                    // 2. Clear pending transaction
-                    localStorage.removeItem('pending_upi_transaction');
-
-                    // 3. Trigger Print automatically
-                    setTimeout(() => {
-                        window.print();
-                    }, 500);
+                    // Note: We DON'T clear pending transaction immediately 
+                    // so we can reprint if Bluetooth fails.
                 } catch (error) {
                     console.error('Failed to sync ticket:', error);
                 }
@@ -42,76 +42,115 @@ export default function PaymentSuccess() {
         return () => window.removeEventListener('popstate', handleBack);
     }, []);
 
-    const handlePrint = () => {
+    const handleDirectBTPrint = async () => {
+        setIsConnecting(true);
+        try {
+            const name = await BluetoothPrinter.connect();
+            setBtStatus('connected');
+            
+            if (lastPrintData) {
+                console.log('Printing UPI Tickets via Bluetooth...');
+                
+                // SKIPPING Master Receipt (Double Paper Fix)
+                
+                // Print individual tickets
+                if (lastPrintData.subTickets && lastPrintData.subTickets.length > 0) {
+                    for (const sub of lastPrintData.subTickets) {
+                        await BluetoothPrinter.printTicket({
+                            id: sub.id,
+                            date: sub.date,
+                            items: sub.items,
+                            total: sub.amount,
+                            mobile: sub.mobile,
+                            paymentMode: 'upi' // Corrected label for labels
+                        });
+                    }
+                }
+                
+                // Clear state now that we definitely printed
+                localStorage.removeItem('pending_upi_transaction');
+            }
+        } catch (error: any) {
+            console.error('BT Print failed:', error);
+            alert(`Printer Error: ${error.message || 'Please ensure Bluetooth is ON'}`);
+        } finally {
+            setIsConnecting(false);
+        }
+    };
+
+    const handleSystemPrintFallback = () => {
         window.print();
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
-            <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-in zoom-in duration-500">
-                <div className="bg-emerald-500 p-8 text-center relative">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-                    <div className="relative z-10">
-                        <div className="bg-white/20 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm border border-white/30">
-                            <CheckCircle2 className="w-12 h-12 text-white" />
-                        </div>
-                        <h1 className="text-3xl font-black text-white tracking-tight uppercase">Payment Success!</h1>
-                        <p className="text-emerald-100 font-bold mt-1 opacity-90">Transaction Verified & Completed</p>
-                    </div>
-                </div>
-
-                <div className="p-8 space-y-6">
-                    <div className="space-y-4">
-                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-4 transition-all hover:bg-slate-100/50">
-                            <div className="bg-emerald-100 p-3 rounded-xl">
-                                <Printer className="w-6 h-6 text-emerald-600" />
-                            </div>
-                            <div className="flex-1">
-                                <h3 className="font-bold text-slate-800">Automatic Printing</h3>
-                                <p className="text-xs text-slate-500 font-medium">Ticket printer should trigger automatically</p>
-                            </div>
-                        </div>
-
-                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-4 transition-all hover:bg-slate-100/50">
-                            <div className="bg-blue-100 p-3 rounded-xl">
-                                <ShoppingBag className="w-6 h-6 text-blue-600" />
-                            </div>
-                            <div className="flex-1">
-                                <h3 className="font-bold text-slate-800">Order Finalized</h3>
-                                <p className="text-xs text-slate-500 font-medium">Cart has been cleared and recorded</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="pt-4 space-y-3">
-                        <button
-                            onClick={handlePrint}
-                            className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-slate-900/20 hover:bg-slate-800 transition-all active:scale-[0.98] flex items-center justify-center gap-3"
-                        >
-                            <Printer className="w-5 h-5" />
-                            Reprint Ticket
-                        </button>
-                        
-                        <button
-                            onClick={() => navigate('/pos')}
-                            className="w-full py-4 bg-white text-slate-800 border-2 border-slate-100 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-slate-50 transition-all active:scale-[0.98] flex items-center justify-center gap-3"
-                        >
-                            <Home className="w-5 h-5" />
-                            Return to POS
-                        </button>
-                    </div>
-                </div>
-
-                <div className="bg-slate-50 p-4 border-t border-slate-100 text-center">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Powered by Ethree Secure Gateway</p>
-                </div>
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans relative overflow-hidden">
+            {/* Success background glows */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-30">
+                <div className="absolute -top-24 -left-24 w-96 h-96 bg-emerald-500 rounded-full blur-[120px] animate-pulse"></div>
+                <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-blue-600 rounded-full blur-[120px] animate-pulse delay-1000"></div>
             </div>
 
-            {/* Hidden Print Container for Success Logic */}
-            <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
-               <div className="p-4 text-center">
-                   <p className="font-bold">Please collect your receipt from the printer.</p>
-               </div>
+            <div className="max-w-md w-full bg-slate-800/40 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/10 animate-in zoom-in duration-500 relative z-10">
+                <div className="bg-emerald-500/90 p-10 text-center relative border-b border-white/10">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+                    <div className="relative z-10">
+                        <div className="bg-white/20 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 backdrop-blur-sm border border-white/30 shadow-2xl scale-110">
+                            <CheckCircle2 className="w-14 h-14 text-white" />
+                        </div>
+                        <h1 className="text-4xl font-black text-white tracking-tight uppercase leading-none">Payment OK!</h1>
+                        <p className="text-emerald-100 font-bold mt-2 opacity-90 tracking-widest text-xs uppercase">Transaction Verified</p>
+                    </div>
+                </div>
+
+                <div className="p-10 space-y-8">
+                    {/* Action Cards */}
+                    <div className="space-y-4">
+                        <button
+                            onClick={handleDirectBTPrint}
+                            disabled={isConnecting}
+                            className={`w-full group relative overflow-hidden p-6 rounded-[2rem] border-2 transition-all duration-300 flex items-center gap-5 ${
+                                isConnecting 
+                                ? 'bg-amber-500/10 border-amber-500/50 grayscale' 
+                                : 'bg-emerald-600 border-emerald-500 hover:bg-emerald-500 hover:shadow-[0_20px_40px_-10px_rgba(16,185,129,0.4)] active:scale-95'
+                            }`}
+                        >
+                            <div className={`p-4 rounded-2xl ${isConnecting ? 'bg-amber-500/20' : 'bg-white/20'} shadow-lg group-hover:scale-110 transition-transform`}>
+                                {isConnecting ? <RefreshCw className="w-8 h-8 text-amber-500 animate-spin" /> : <Bluetooth className="w-8 h-8 text-white" />}
+                            </div>
+                            <div className="text-left">
+                                <h3 className={`font-black uppercase tracking-wider ${isConnecting ? 'text-amber-500' : 'text-white'}`}>
+                                    {isConnecting ? 'Detecting...' : 'ACTIVATE PRINTER'}
+                                </h3>
+                                <p className={`text-xs font-bold leading-none ${isConnecting ? 'text-amber-500/50' : 'text-emerald-100/70'}`}>
+                                    {isConnecting ? 'Checking Bluetooth...' : 'Instant Thermal Print'}
+                                </p>
+                            </div>
+                            {!isConnecting && <div className="ml-auto w-2 h-2 rounded-full bg-white opacity-50 animate-ping"></div>}
+                        </button>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <button
+                                onClick={handleSystemPrintFallback}
+                                className="p-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col items-center justify-center gap-2 hover:bg-white/10 transition-all text-slate-400 hover:text-white"
+                            >
+                                <Printer size={20} />
+                                <span className="text-[10px] font-bold uppercase tracking-widest">System Print</span>
+                            </button>
+                            <button
+                                onClick={() => navigate('/pos')}
+                                className="p-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col items-center justify-center gap-2 hover:bg-white/10 transition-all text-slate-400 hover:text-white"
+                            >
+                                <Home size={20} />
+                                <span className="text-[10px] font-bold uppercase tracking-widest">Dashboard</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div className="pt-2 text-center border-t border-white/5 pt-6">
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Ethree Secure Gateway</p>
+                        <p className="text-[10px] font-medium text-slate-600">Please collect receipts and hand over to customer</p>
+                    </div>
+                </div>
             </div>
         </div>
     );

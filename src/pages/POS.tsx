@@ -136,10 +136,10 @@ export default function POS() {
                 });
                 console.log('Fetched Rides:', response.data);
                 
-                // FORCE: Change 'Train' price to 0.5 for testing
+                // FORCE: Change 'Train' price to 0.01 for testing
                 const adjustedRides = response.data.map((r: any) => {
                     if (r.name.toUpperCase().includes('TRAIN')) {
-                        return { ...r, price: 0.5 };
+                        return { ...r, price: 0.01 };
                     }
                     return r;
                 });
