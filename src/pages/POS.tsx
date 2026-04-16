@@ -331,14 +331,14 @@ export default function POS() {
         cart.forEach(item => {
             const isCombo = item.name.toLowerCase().includes('combo');
             if (isCombo) {
-                // Special Case: Combo Ride prints 6 tickets per quantity
-                for (let i = 0; i < item.quantity * 6; i++) {
+                // Special Case: Combo Ride prints 7 tickets per quantity
+                for (let i = 0; i < item.quantity * 7; i++) {
                     const subId = `${ticketId}-C${subTickets.length + 1}`;
                     const subTicket = {
                         id: subId,
                         amount: 100, // Fixed price per sub-ticket for combo
                         date: date,
-                        items: [{ ...item, quantity: 1, name: item.name.replace(/\(5\s*Rides\)/gi, '(6 Rides)').toUpperCase(), price: 100 }],
+                        items: [{ ...item, quantity: 1, name: item.name.replace(/\(6\s*Rides\)/gi, '(7 Rides)').toUpperCase(), price: 100 }],
                         total: 100,
                         status: 'valid',
                         mobile: mobileNumber,
