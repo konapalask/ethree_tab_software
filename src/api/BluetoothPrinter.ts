@@ -66,11 +66,15 @@ class BluetoothPrinterService {
             };
 
             // If a specific printer name is provided, filter for it to make selection easier
+            // Removed filter for now to ensure user can ALWAYS see their printer in the list
+            /*
             if (targetName) {
                 options.filters = [{ name: targetName }];
             } else {
                 options.acceptAllDevices = true;
             }
+            */
+            options.acceptAllDevices = true;
             
             this.device = await (navigator as any).bluetooth.requestDevice(options);
 
