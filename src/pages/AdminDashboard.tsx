@@ -56,7 +56,7 @@ export default function AdminDashboard() {
         // Auto-Resume Bluetooth on Mount
         const autoResume = async () => {
             const isPaired = localStorage.getItem('bt_printer_paired') === 'true';
-            const targetName = "PRINTER 001-6D49";
+            const targetName = localStorage.getItem('bt_printer_name') || "PRINTER 001-6D49";
 
             if (isPaired && !BluetoothPrinter.isConnected) {
                 try {
