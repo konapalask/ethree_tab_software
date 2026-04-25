@@ -83,15 +83,21 @@ export default function POS() {
             
             if (isPaired && !BluetoothPrinter.isConnected) {
                 console.log('Attempting Auto-Resume Bluetooth connection...');
-                try {
-                    const connected = await BluetoothPrinter.autoConnect(targetName);
-                    if (connected) {
-                        setBtStatus('connected');
-                        console.log('Bluetooth Auto-Resumed Successfully!');
+                // Try up to 3 times to handle hardware wake-up racing conditions
+                for (let i = 0; i < 3; i++) {
+                    try {
+                        const connected = await BluetoothPrinter.autoConnect(targetName);
+                        if (connected) {
+                            setBtStatus('connected');
+                            console.log('Bluetooth Auto-Resumed Successfully!');
+                            return;
+                        }
+                    } catch (e) {
+                        console.log(`Auto-resume Attempt ${i + 1} failed, retrying...`);
                     }
-                } catch (e) {
-                    console.log('Auto-resume failed (first time session or out of range)');
+                    await new Promise(resolve => setTimeout(resolve, 1500)); // Wait before next try
                 }
+                console.log('Auto-resume failed all attempts. Please reconnect manually.');
             }
         };
         autoResume();

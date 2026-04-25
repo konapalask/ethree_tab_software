@@ -59,13 +59,18 @@ export default function AdminDashboard() {
             const targetName = localStorage.getItem('bt_printer_name') || "PRINTER 001-6D49";
 
             if (isPaired && !BluetoothPrinter.isConnected) {
-                try {
-                    const connected = await BluetoothPrinter.autoConnect(targetName);
-                    if (connected) {
-                        setBtStatus('connected');
+                // Try up to 3 times to handle hardware wake-up racing conditions
+                for (let i = 0; i < 3; i++) {
+                    try {
+                        const connected = await BluetoothPrinter.autoConnect(targetName);
+                        if (connected) {
+                            setBtStatus('connected');
+                            return;
+                        }
+                    } catch (e) {
+                        console.log(`Auto-resume Attempt ${i + 1} failed, retrying...`);
                     }
-                } catch (e) {
-                    console.log('Auto-resume failed');
+                    await new Promise(resolve => setTimeout(resolve, 1500)); // Wait before next try
                 }
             }
         };
