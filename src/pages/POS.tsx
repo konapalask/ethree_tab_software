@@ -107,7 +107,8 @@ export default function POS() {
     const connectBluetooth = async () => {
         setIsBTConnecting(true);
         try {
-            const printerName = await BluetoothPrinter.connect();
+            const targetName = localStorage.getItem('bt_printer_name') || "PRINTER 001-6D49";
+            const printerName = await BluetoothPrinter.connect(targetName);
             
             console.log('Bluetooth Device Selected:', printerName);
             setBtStatus('connected');
