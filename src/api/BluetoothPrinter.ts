@@ -14,6 +14,7 @@ export interface PrinterDevice {
 class BluetoothPrinterService {
     private device: any = null;
     private characteristic: any = null;
+    private printBuffer: Uint8Array[] = [];
 
     // List of common Thermal Printer Service UUIDs
     private COMMON_SERVICES = [
@@ -44,6 +45,10 @@ class BluetoothPrinterService {
      * @param targetName Optional name to filter for (e.g. "PRINTER 001-6D49")
      */
     async connect(targetName?: string): Promise<string> {
+        if ((window as any).__NATIVE_BT_BRIDGE__) {
+            return await (window as any).BluetoothPrinter.connect(targetName);
+        }
+
         try {
             if (!(navigator as any).bluetooth) {
                 // Check if this is a Median App
@@ -88,6 +93,10 @@ class BluetoothPrinterService {
      * (Experimental Web Bluetooth feature)
      */
     async autoConnect(targetName: string): Promise<string | null> {
+        if ((window as any).__NATIVE_BT_BRIDGE__) {
+            return await (window as any).BluetoothPrinter.autoConnect(targetName);
+        }
+
         if (!(navigator as any).bluetooth || !(navigator as any).bluetooth.getDevices) {
             return null;
         }
@@ -150,11 +159,28 @@ class BluetoothPrinterService {
     /**
      * Send raw data in chunks (Printers often have small buffers)
      */
-    private async write(data: Uint8Array) {
+    private async write(data: Uint8Array, flush = false) {
+        if ((window as any).__NATIVE_BT_BRIDGE__) {
+            this.printBuffer.push(data);
+            if (flush) {
+                // concatenate all
+                const totalLength = this.printBuffer.reduce((acc, val) => acc + val.length, 0);
+                const finalData = new Uint8Array(totalLength);
+                let offset = 0;
+                for (let arr of this.printBuffer) {
+                    finalData.set(arr, offset);
+                    offset += arr.length;
+                }
+                const binaryString = Array.from(finalData).map(byte => String.fromCharCode(byte)).join('');
+                const b64 = btoa(binaryString);
+                await (window as any).BluetoothPrinter.printRawBase64(b64);
+                this.printBuffer = []; // reset
+            }
+            return;
+        }
+
         if (!this.characteristic) {
-            // Check if device is still connected
             if (this.device && this.device.gatt.connected) {
-                // Try to re-fetch characteristic? Usually lost session means re-connect.
                 throw new Error('Printer session lost. Please reconnect.');
             }
             throw new Error('Printer not connected');
@@ -244,7 +270,7 @@ class BluetoothPrinterService {
             
             // 7. Cut
             await this.write(new Uint8Array([0x0A, 0x0A, 0x0A, 0x0A])); // Line feeds
-            await this.write(this.COMMANDS.FEED_CUT);
+            await this.write(this.COMMANDS.FEED_CUT, true); // <--- TRUE triggers the Native bridge flush!
         } catch (e) {
             console.error("Print execution failed", e);
             throw e;
@@ -252,6 +278,9 @@ class BluetoothPrinterService {
     }
 
     get isConnected() {
+        if ((window as any).__NATIVE_BT_BRIDGE__) {
+            return (window as any).BluetoothPrinter.isConnected;
+        }
         return this.device && this.device.gatt.connected && this.characteristic;
     }
 }
