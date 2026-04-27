@@ -71,19 +71,42 @@ export default function POS() {
         const isPaired = localStorage.getItem('bt_printer_paired') === 'true';
         return isPaired ? 'paired_not_linked' : 'disconnected';
     });
+    
+    // USB/OTG Printer State
+    const [isUSBConnecting, setIsUSBConnecting] = useState(false);
+    const [usbStatus, setUsbStatus] = useState<'disconnected' | 'connected'>(() => {
+        return localStorage.getItem('usb_printer_connected') === 'true' ? 'connected' : 'disconnected';
+    });
+
     const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
     const [pollingTxnId, setPollingTxnId] = useState<string | null>(null);
     const [isPrinting, setIsPrinting] = useState(false);
 
-    // Auto-Resume Bluetooth on Mount
+    // Auto-Resume Printers on Mount
     useEffect(() => {
         const autoResume = async () => {
+            // 1. USB Auto-Resume (OTG) - Priority
+            const wasUSBConnected = localStorage.getItem('usb_printer_connected') === 'true';
+            if (wasUSBConnected) {
+                console.log('Attempting Auto-Resume USB connection...');
+                try {
+                    const usbConnected = await BluetoothPrinter.autoConnectUSB();
+                    if (usbConnected) {
+                        setUsbStatus('connected');
+                        console.log('USB Auto-Resumed Successfully!');
+                        // If USB is connected, we might not need BT, but we can try both
+                    }
+                } catch (e) {
+                    console.warn('USB Auto-resume failed');
+                }
+            }
+
+            // 2. Bluetooth Auto-Resume
             const isPaired = localStorage.getItem('bt_printer_paired') === 'true';
             const targetName = localStorage.getItem('bt_printer_name') || "PRINTER 001-6D49";
             
             if (isPaired && !BluetoothPrinter.isConnected) {
                 console.log('Attempting Auto-Resume Bluetooth connection...');
-                // Try up to 3 times to handle hardware wake-up racing conditions
                 for (let i = 0; i < 3; i++) {
                     try {
                         const connected = await BluetoothPrinter.autoConnect(targetName);
@@ -95,9 +118,8 @@ export default function POS() {
                     } catch (e) {
                         console.log(`Auto-resume Attempt ${i + 1} failed, retrying...`);
                     }
-                    await new Promise(resolve => setTimeout(resolve, 1500)); // Wait before next try
+                    await new Promise(resolve => setTimeout(resolve, 1500));
                 }
-                console.log('Auto-resume failed all attempts. Please reconnect manually.');
             }
         };
         autoResume();
@@ -106,9 +128,12 @@ export default function POS() {
             if (btStatus === 'connected' && !BluetoothPrinter.isConnected) {
                 setBtStatus('paired_not_linked');
             }
+            if (usbStatus === 'connected' && !BluetoothPrinter.isConnected) {
+                setUsbStatus('disconnected');
+            }
         }, 5000);
         return () => clearInterval(checkStatus);
-    }, [btStatus]);
+    }, [btStatus, usbStatus]);
 
     const connectBluetooth = async () => {
         setIsBTConnecting(true);
@@ -144,6 +169,26 @@ export default function POS() {
         localStorage.removeItem('bt_printer_paired');
         localStorage.removeItem('bt_printer_name');
         setBtStatus('disconnected');
+    };
+
+    const connectUSB = async () => {
+        setIsUSBConnecting(true);
+        try {
+            const printerName = await BluetoothPrinter.connectUSB();
+            setUsbStatus('connected');
+            localStorage.setItem('usb_printer_connected', 'true');
+            alert(`USB Printer "${printerName}" Ready!`);
+        } catch (error: any) {
+            console.error('USB Connection Failed:', error);
+            alert(`USB connection failed: ${error.message || 'Unknown error'}`);
+        } finally {
+            setIsUSBConnecting(false);
+        }
+    };
+
+    const disconnectUSB = () => {
+        localStorage.removeItem('usb_printer_connected');
+        setUsbStatus('disconnected');
     };
 
     useEffect(() => {
@@ -690,19 +735,38 @@ export default function POS() {
                                 )}
 
                                  {/* Bluetooth Printer Pairing */}
-                                <button 
+                                 <button 
                                     onClick={btStatus === 'connected' ? disconnectBluetooth : connectBluetooth}
                                     className={`px-2 py-0.5 md:py-1 rounded-full text-[10px] md:text-xs font-bold flex items-center gap-1.5 border transition-all active:scale-95 backdrop-blur-sm ${
                                         btStatus === 'connected' 
-                                        ? 'bg-blue-500 text-white border-blue-600 shadow-md animate-pulse' 
+                                        ? 'bg-blue-500 text-white border-blue-600 shadow-md' 
                                         : btStatus === 'paired_not_linked'
                                         ? 'bg-amber-500 text-white border-amber-600'
                                         : 'bg-slate-800/50 text-slate-400 border-slate-700 hover:bg-slate-800'
                                     }`}
+                                    title="Bluetooth Printer"
                                 >
+                                    <div className={`w-1.5 h-1.5 rounded-full ${btStatus === 'connected' ? 'bg-white animate-pulse' : 'bg-slate-600'}`}></div>
                                     <Printer size={12} className={isBTConnecting ? 'animate-bounce' : ''} />
                                     <span>
-                                        {isBTConnecting ? 'PAIRING...' : btStatus === 'connected' ? (localStorage.getItem('bt_printer_name')?.substring(0, 8) || 'ONLINE') : btStatus === 'paired_not_linked' ? 'RECONNECT' : 'PAIR PRINTER'}
+                                        {isBTConnecting ? 'PAIRING...' : btStatus === 'connected' ? 'BT ON' : btStatus === 'paired_not_linked' ? 'RECONNECT' : 'BT'}
+                                    </span>
+                                </button>
+
+                                {/* USB / OTG Printer */}
+                                <button 
+                                    onClick={usbStatus === 'connected' ? disconnectUSB : connectUSB}
+                                    className={`px-2 py-0.5 md:py-1 rounded-full text-[10px] md:text-xs font-bold flex items-center gap-1.5 border transition-all active:scale-95 backdrop-blur-sm ${
+                                        usbStatus === 'connected' 
+                                        ? 'bg-emerald-500 text-white border-emerald-600 shadow-md shadow-emerald-500/20' 
+                                        : 'bg-slate-800/50 text-slate-400 border-slate-700 hover:bg-slate-800'
+                                    }`}
+                                    title="USB/OTG Printer"
+                                >
+                                    <div className={`w-1.5 h-1.5 rounded-full ${usbStatus === 'connected' ? 'bg-white animate-pulse' : 'bg-slate-600'}`}></div>
+                                    <Smartphone size={12} className={isUSBConnecting ? 'animate-spin' : ''} />
+                                    <span>
+                                        {isUSBConnecting ? 'LINKING...' : usbStatus === 'connected' ? 'OTG ON' : 'OTG'}
                                     </span>
                                 </button>
                                 {btError && (

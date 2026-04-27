@@ -16,6 +16,10 @@ class BluetoothPrinterService {
     private characteristic: any = null;
     private printBuffer: Uint8Array[] = [];
 
+    // USB State
+    private usbDevice: any = null;
+    private usbEndpoint: number | null = null;
+
     // List of common Thermal Printer Service UUIDs
     private COMMON_SERVICES = [
         '000018f0-0000-1000-8000-00805f9b34fb', // Standard
@@ -39,6 +43,71 @@ class BluetoothPrinterService {
         DOUBLE_SIZE: new Uint8Array([0x1D, 0x21, 0x11]), // Double width and height
         NORMAL_TEXT: new Uint8Array([0x1D, 0x21, 0x00]),
     };
+
+    /**
+     * Connect to USB Printer (OTG)
+     */
+    async connectUSB(): Promise<string> {
+        try {
+            if (!(navigator as any).usb) {
+                throw new Error('WebUSB not supported on this browser.');
+            }
+
+            this.usbDevice = await (navigator as any).usb.requestDevice({
+                filters: [{ classCode: 0x07 }] // Printer Class
+            });
+
+            await this.usbDevice.open();
+            if (this.usbDevice.configuration === null) {
+                await this.usbDevice.selectConfiguration(1);
+            }
+
+            // Find the printer interface
+            const iface = this.usbDevice.configuration.interfaces.find((i: any) => 
+                i.alternate.endpoints.some((e: any) => e.direction === 'out')
+            ) || this.usbDevice.configuration.interfaces[0];
+
+            await this.usbDevice.claimInterface(iface.interfaceNumber);
+
+            const endpoint = iface.alternate.endpoints.find((e: any) => e.direction === 'out');
+            if (!endpoint) throw new Error('No output endpoint found on USB printer.');
+            
+            this.usbEndpoint = endpoint.endpointNumber;
+            console.log('USB Printer Connected:', this.usbDevice.productName);
+            return this.usbDevice.productName || 'USB Thermal Printer';
+        } catch (error: any) {
+            console.error('USB Connection failed:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Auto-reconnect to the first authorized USB device
+     */
+    async autoConnectUSB(): Promise<string | null> {
+        if (!(navigator as any).usb) return null;
+
+        try {
+            const devices = await (navigator as any).usb.getDevices();
+            const printer = devices.find((d: any) => d.opened === false); // Pick the first recognized printer
+
+            if (printer) {
+                this.usbDevice = printer;
+                await this.usbDevice.open();
+                if (this.usbDevice.configuration === null) {
+                    await this.usbDevice.selectConfiguration(1);
+                }
+                const iface = this.usbDevice.configuration.interfaces[0];
+                await this.usbDevice.claimInterface(iface.interfaceNumber);
+                const endpoint = iface.alternate.endpoints.find((e: any) => e.direction === 'out');
+                this.usbEndpoint = endpoint?.endpointNumber || null;
+                return this.usbDevice.productName || 'USB Thermal Printer';
+            }
+        } catch (e) {
+            console.warn('USB Auto-connect failed', e);
+        }
+        return null;
+    }
 
     /**
      * Connect to any compatible Bluetooth Printer
@@ -65,15 +134,6 @@ class BluetoothPrinterService {
                 optionalServices: this.COMMON_SERVICES
             };
 
-            // If a specific printer name is provided, filter for it to make selection easier
-            // Removed filter for now to ensure user can ALWAYS see their printer in the list
-            /*
-            if (targetName) {
-                options.filters = [{ name: targetName }];
-            } else {
-                options.acceptAllDevices = true;
-            }
-            */
             options.acceptAllDevices = true;
             
             this.device = await (navigator as any).bluetooth.requestDevice(options);
@@ -164,10 +224,10 @@ class BluetoothPrinterService {
      * Send raw data in chunks (Printers often have small buffers)
      */
     private async write(data: Uint8Array, flush = false) {
+        // --- NATIVE BRIDGE ---
         if ((window as any).__NATIVE_BT_BRIDGE__) {
             this.printBuffer.push(data);
             if (flush) {
-                // concatenate all
                 const totalLength = this.printBuffer.reduce((acc, val) => acc + val.length, 0);
                 const finalData = new Uint8Array(totalLength);
                 let offset = 0;
@@ -178,11 +238,22 @@ class BluetoothPrinterService {
                 const binaryString = Array.from(finalData).map(byte => String.fromCharCode(byte)).join('');
                 const b64 = btoa(binaryString);
                 await (window as any).BluetoothPrinter.printRawBase64(b64);
-                this.printBuffer = []; // reset
+                this.printBuffer = [];
             }
             return;
         }
 
+        // --- USB (OTG) ---
+        if (this.usbDevice && this.usbEndpoint !== null) {
+            try {
+                await this.usbDevice.transferOut(this.usbEndpoint, data);
+                return;
+            } catch (usbError) {
+                console.warn('USB Write failed, falling back to Bluetooth if available', usbError);
+            }
+        }
+
+        // --- BLUETOOTH ---
         if (!this.characteristic) {
             if (this.device && this.device.gatt.connected) {
                 throw new Error('Printer session lost. Please reconnect.');
@@ -236,21 +307,16 @@ class BluetoothPrinterService {
             // 4. Items
             for (const item of data.items) {
                 const name = item.name.toUpperCase().substring(0, 18);
-                const isCombo = name.includes('COMBO');
-                
                 const line = `${name.padEnd(20)} x${item.quantity}\n`;
                 await this.write(encoder.encode(line));
                 
-                // Hide price for individual combo coupons
-                if (!isCombo) {
+                if (!name.includes('COMBO')) {
                     await this.write(encoder.encode(`Price: INR ${item.price * item.quantity}\n`));
                 }
             }
 
             // 5. Total
-            // Only show total if NOT a combo coupon (Combos are usually pre-paid/fixed)
             const containsCombo = data.items.some(i => i.name.toUpperCase().includes('COMBO'));
-            
             await this.write(encoder.encode("--------------------------------\n"));
             if (!containsCombo) {
                 await this.write(this.COMMANDS.BOLD_ON);
@@ -258,7 +324,7 @@ class BluetoothPrinterService {
                 await this.write(this.COMMANDS.BOLD_OFF);
             }
             
-            // 6. Prominent Payment Mode (HIGHLIGHTED)
+            // 6. Payment Mode
             if (data.paymentMode) {
                 await this.write(this.COMMANDS.ALIGN_CENTER);
                 await this.write(this.COMMANDS.DOUBLE_SIZE);
@@ -272,9 +338,9 @@ class BluetoothPrinterService {
             await this.write(encoder.encode("Support: +91 70369 23456\n"));
             await this.write(encoder.encode("Thank You! Visit Again\n"));
             
-            // 7. Cut
-            await this.write(new Uint8Array([0x0A, 0x0A, 0x0A, 0x0A])); // Line feeds
-            await this.write(this.COMMANDS.FEED_CUT, true); // <--- TRUE triggers the Native bridge flush!
+            // 8. Cut
+            await this.write(new Uint8Array([0x0A, 0x0A, 0x0A, 0x0A]));
+            await this.write(this.COMMANDS.FEED_CUT, true);
         } catch (e) {
             console.error("Print execution failed", e);
             throw e;
@@ -285,8 +351,17 @@ class BluetoothPrinterService {
         if ((window as any).__NATIVE_BT_BRIDGE__) {
             return (window as any).BluetoothPrinter.isConnected;
         }
-        return this.device && this.device.gatt.connected && this.characteristic;
+        const btOk = this.device && this.device.gatt.connected && this.characteristic;
+        const usbOk = this.usbDevice && this.usbEndpoint !== null;
+        return btOk || usbOk;
+    }
+
+    get connectionType() {
+        if (this.usbDevice) return 'usb';
+        if (this.device) return 'bluetooth';
+        return 'none';
     }
 }
 
 export const BluetoothPrinter = new BluetoothPrinterService();
+
