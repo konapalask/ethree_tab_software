@@ -54,7 +54,11 @@ class BluetoothPrinterService {
             }
 
             this.usbDevice = await (navigator as any).usb.requestDevice({
-                filters: [{ classCode: 0x07 }] // Printer Class
+                filters: [
+                    { classCode: 0x07 }, // Standard Printer Class
+                    { classCode: 0xff }, // Vendor Specific (Common for many printers)
+                    { classCode: 0x00 }, // Interface Class 0
+                ]
             });
 
             await this.usbDevice.open();
