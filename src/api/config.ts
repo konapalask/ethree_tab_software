@@ -7,8 +7,8 @@
 
 const envApiUrl = import.meta.env.VITE_API_URL;
 
-// Default local server endpoint (ngrok tunnel)
-const LOCAL_BACKEND = 'https://swampland-situated-barbell.ngrok-free.dev'; 
+// Default production server endpoint
+const LOCAL_BACKEND = 'https://e3-e4-backend.ethree.in'; 
 
 // Always default to local server endpoint unless explicitly overridden via ENV
 export const API_URL = envApiUrl || LOCAL_BACKEND;

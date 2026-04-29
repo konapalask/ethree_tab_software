@@ -145,7 +145,7 @@ export default function AdminDashboard() {
         setLoading(true);
         try {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const posId = (user.role === 'superadmin') ? 'all' : (user.posId || 'pos1');
+            const posId = (user.role === 'superadmin' || user.role === 'admin') ? 'all' : (user.posId || 'pos1');
             const response = await axios.get(`${API_URL}/api/tickets?posId=${posId}`);
 
             // Store raw response for reprinting sub-tickets
@@ -179,7 +179,7 @@ export default function AdminDashboard() {
     const fetchStats = async () => {
         try {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const posId = (user.role === 'superadmin') ? 'all' : (user.posId || 'pos1');
+            const posId = (user.role === 'superadmin' || user.role === 'admin') ? 'all' : (user.posId || 'pos1');
             const response = await axios.get(`${API_URL}/api/tickets/stats?posId=${posId}`);
             setTicketStats(response.data);
         } catch (error) {
