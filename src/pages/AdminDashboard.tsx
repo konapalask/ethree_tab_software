@@ -154,9 +154,10 @@ export default function AdminDashboard() {
             // FIX: Filter out "Sub-Tickets" (Coupons) to avoid double counting transactions.
             const validTickets = response.data.filter((t: any) => !t.parentId);
 
-            setTickets(validTickets);
+            setTickets(Array.isArray(validTickets) ? validTickets : []);
         } catch (error) {
             console.error('Failed to fetch tickets', error);
+            setTickets([]);
         } finally {
             setLoading(false);
         }
@@ -181,7 +182,7 @@ export default function AdminDashboard() {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
             const posId = (user.role === 'superadmin' || user.role === 'admin') ? 'all' : (user.posId || 'pos1');
             const response = await axios.get(`${API_URL}/api/tickets/stats?posId=${posId}`);
-            setTicketStats(response.data);
+            setTicketStats(response.data || { total: 0, revenue: 0, scanned: 0, pending: 0 });
         } catch (error) {
             console.error('Failed to fetch stats', error);
         }
@@ -313,7 +314,7 @@ export default function AdminDashboard() {
     };
 
     // Derived Stats
-    const totalRevenue = tickets.reduce((sum, t) => sum + t.amount, 0);
+    const totalRevenue = tickets.reduce((sum, t) => sum + (t.amount || 0), 0);
 
     // Filtered Tickets
     const filteredTickets = tickets.filter(t => {
@@ -338,13 +339,20 @@ export default function AdminDashboard() {
         });
 
         const aggregation = last7Days.map(date => {
-            const dailyTickets = tickets.filter(t => new Date(t.createdAt).toISOString().split('T')[0] === date);
+            const dailyTickets = tickets.filter(t => {
+                if (!t.createdAt) return false;
+                try {
+                    return new Date(t.createdAt).toISOString().split('T')[0] === date;
+                } catch (e) {
+                    return false;
+                }
+            });
             return {
                 date,
                 count: dailyTickets.length,
-                revenue: dailyTickets.reduce((sum, t) => sum + t.amount, 0),
-                cash: dailyTickets.filter(t => !t.paymentMode || t.paymentMode.toLowerCase() === 'cash').reduce((sum, t) => sum + t.amount, 0),
-                upi: dailyTickets.filter(t => t.paymentMode?.toLowerCase() === 'upi').reduce((sum, t) => sum + t.amount, 0),
+                revenue: dailyTickets.reduce((sum, t) => sum + (t.amount || 0), 0),
+                cash: dailyTickets.filter(t => !t.paymentMode || t.paymentMode.toLowerCase() === 'cash').reduce((sum, t) => sum + (t.amount || 0), 0),
+                upi: dailyTickets.filter(t => t.paymentMode?.toLowerCase() === 'upi').reduce((sum, t) => sum + (t.amount || 0), 0),
             };
         });
 
@@ -925,7 +933,7 @@ export default function AdminDashboard() {
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
-                                                    <span className="text-emerald-600 font-black text-base">₹{ticket.amount.toLocaleString()}</span>
+                                                    <span className="text-emerald-600 font-black text-base">₹{(ticket.amount || 0).toLocaleString()}</span>
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <button
@@ -965,7 +973,7 @@ export default function AdminDashboard() {
                                             <span className="text-xs font-bold uppercase tracking-widest">Total Revenue (7 Days)</span>
                                         </div>
                                         <div className="text-4xl font-black tracking-tight text-white mb-1">
-                                            ₹{tickets.reduce((sum, t) => sum + t.amount, 0).toLocaleString()}
+                                            ₹{tickets.reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
                                         </div>
                                         <div className="text-xs font-medium text-slate-400">
                                             {tickets.length} total tickets processed
@@ -983,14 +991,14 @@ export default function AdminDashboard() {
                                                 <div className="w-3 h-3 rounded-full bg-amber-500"></div>
                                                 <span className="text-sm font-bold text-slate-600">Cash:</span>
                                                 <span className="text-sm font-black text-slate-900">
-                                                    ₹{tickets.filter(t => !t.paymentMode || t.paymentMode === 'cash').reduce((sum, t) => sum + t.amount, 0).toLocaleString()}
+                                                    ₹{tickets.filter(t => !t.paymentMode || t.paymentMode === 'cash').reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-3">
                                                 <div className="w-3 h-3 rounded-full bg-blue-600"></div>
                                                 <span className="text-sm font-bold text-slate-600">UPI:</span>
                                                 <span className="text-sm font-black text-slate-900">
-                                                    ₹{tickets.filter(t => t.paymentMode === 'upi').reduce((sum, t) => sum + t.amount, 0).toLocaleString()}
+                                                    ₹{tickets.filter(t => t.paymentMode === 'upi').reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
                                                 </span>
                                             </div>
                                         </div>
@@ -1000,8 +1008,8 @@ export default function AdminDashboard() {
                                             <PieChart>
                                                 <Pie
                                                     data={[
-                                                        { name: 'Cash', value: tickets.filter(t => !t.paymentMode || t.paymentMode === 'cash').reduce((sum, t) => sum + t.amount, 0) },
-                                                        { name: 'UPI', value: tickets.filter(t => t.paymentMode === 'upi').reduce((sum, t) => sum + t.amount, 0) }
+                                                        { name: 'Cash', value: tickets.filter(t => !t.paymentMode || t.paymentMode === 'cash').reduce((sum, t) => sum + (t.amount || 0), 0) },
+                                                        { name: 'UPI', value: tickets.filter(t => t.paymentMode === 'upi').reduce((sum, t) => sum + (t.amount || 0), 0) }
                                                     ]}
                                                     cx="50%"
                                                     cy="50%"
@@ -1052,7 +1060,7 @@ export default function AdminDashboard() {
                                                         <span className="font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">{ride.count}</span>
                                                     </td>
                                                     <td className="px-6 py-3 text-right">
-                                                        <span className="text-emerald-600 font-bold">₹{ride.revenue.toLocaleString()}</span>
+                                                        <span className="text-emerald-600 font-bold">₹{(ride.revenue || 0).toLocaleString()}</span>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -1094,14 +1102,14 @@ export default function AdminDashboard() {
                                                         <span className="font-black text-slate-600">{day.count}</span>
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
-                                                        <span className="text-amber-600 font-bold">₹{day.cash.toLocaleString()}</span>
+                                                        <span className="text-amber-600 font-bold">₹{(day.cash || 0).toLocaleString()}</span>
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
-                                                        <span className="text-blue-600 font-bold">₹{day.upi.toLocaleString()}</span>
+                                                        <span className="text-blue-600 font-bold">₹{(day.upi || 0).toLocaleString()}</span>
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
                                                         <div className="flex flex-col items-end gap-1">
-                                                            <span className="text-emerald-600 font-black text-lg leading-none">₹{day.revenue.toLocaleString()}</span>
+                                                            <span className="text-emerald-600 font-black text-lg leading-none">₹{(day.revenue || 0).toLocaleString()}</span>
                                                             <button
                                                                 onClick={() => downloadDailyReport(day)}
                                                                 className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-600 bg-slate-50 hover:bg-white px-2 py-0.5 rounded border border-transparent hover:border-blue-100 transition-all"
