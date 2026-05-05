@@ -37,6 +37,7 @@ export default function AdminDashboard() {
     const [view, setView] = useState<'transactions' | 'analytics' | 'users'>('transactions');
     const [ticketStats, setTicketStats] = useState({ total: 0, revenue: 0, scanned: 0, pending: 0 });
     const [allRawTickets, setAllRawTickets] = useState<any[]>([]);
+    const [showAllHistory, setShowAllHistory] = useState(false);
 
     // Bluetooth Printer State
     const [isBTConnecting, setIsBTConnecting] = useState(false);
@@ -240,17 +241,26 @@ export default function AdminDashboard() {
     const downloadCSV = () => {
         if (tickets.length === 0) return;
 
-        const headers = ['Ticket ID', 'Date', 'Amount', 'Mobile', 'Payment Mode', 'Created At'];
+        const headers = ['Ticket ID', 'Date', 'Items Sold', 'Amount', 'Mobile', 'Payment Mode', 'Issued By'];
         const csvContent = [
             headers.join(','),
-            ...tickets.map(t => [
-                t.id,
-                `"${new Date(t.createdAt).toISOString().split('T')[0]}"`,
-                t.amount,
-                t.mobile || '',
-                t.paymentMode?.toLowerCase() || 'cash',
-                `"${new Date(t.createdAt).toISOString().split('T')[0]}"`
-            ].join(','))
+            ...tickets.map(t => {
+                const date = new Date(t.createdAt).toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                });
+                const items = t.items?.map((i: any) => `${i.name} (x${i.quantity})`).join('; ') || 'N/A';
+                return [
+                    t.id,
+                    `"${date}"`,
+                    `"${items}"`,
+                    t.amount,
+                    t.mobile || '',
+                    t.paymentMode?.toUpperCase() || 'CASH',
+                    t.createdBy || 'System'
+                ].join(',');
+            })
         ].join('\n');
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -269,13 +279,20 @@ export default function AdminDashboard() {
         const headers = ['Date', 'Total Tickets', 'Total Revenue', 'Cash Revenue', 'UPI Revenue'];
         const csvContent = [
             headers.join(','),
-            ...data.map(d => [
-                d.date,
-                d.count,
-                d.revenue,
-                d.cash,
-                d.upi
-            ].join(','))
+            ...data.map(d => {
+                const formattedDate = new Date(d.date).toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                });
+                return [
+                    `"${formattedDate}"`,
+                    d.count,
+                    d.revenue,
+                    d.cash,
+                    d.upi
+                ].join(',');
+            })
         ].join('\n');
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -291,10 +308,15 @@ export default function AdminDashboard() {
 
     const downloadDailyReport = (day: any) => {
         const headers = ['Date', 'Tickets Sold', 'Cash Revenue', 'UPI Revenue', 'Total Revenue'];
+        const formattedDate = new Date(day.date).toLocaleDateString('en-IN', {
+            day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                });
         const csvContent = [
             headers.join(','),
             [
-                day.date,
+                `"${formattedDate}"`,
                 day.count,
                 day.cash,
                 day.upi,
@@ -316,12 +338,36 @@ export default function AdminDashboard() {
     // Derived Stats
     const totalRevenue = tickets.reduce((sum, t) => sum + (t.amount || 0), 0);
 
+    // Calculate Today Stats in Frontend for accuracy
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const todayTickets = tickets.filter(t => {
+        const d = new Date(t.createdAt);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}` === todayStr;
+    });
+
+    const calculatedTodayStats = {
+        revenue: todayTickets.reduce((sum, t) => sum + (t.amount || 0), 0),
+        total: todayTickets.length
+    };
+
     // Filtered Tickets
     const filteredTickets = tickets.filter(t => {
         const idMatch = t.id ? t.id.toLowerCase().includes(searchTerm.toLowerCase()) : false;
         const mobileMatch = t.mobile ? t.mobile.includes(searchTerm) : false;
         const userMatch = selectedUserSales ? t.createdBy === selectedUserSales : true;
-        return (idMatch || mobileMatch) && userMatch;
+        
+        // Date Match: Show only today by default, unless showAllHistory is true
+        const d = new Date(t.createdAt);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const tDateStr = `${year}-${month}-${day}`;
+        const dateMatch = showAllHistory ? true : (tDateStr === todayStr);
+
+        return (idMatch || mobileMatch) && userMatch && dateMatch;
     });
 
     // Filtered Users
@@ -335,17 +381,21 @@ export default function AdminDashboard() {
         const last7Days = [...Array(7)].map((_, i) => {
             const d = new Date();
             d.setDate(d.getDate() - i);
-            return d.toISOString().split('T')[0];
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
         });
 
         const aggregation = last7Days.map(date => {
             const dailyTickets = tickets.filter(t => {
                 if (!t.createdAt) return false;
-                try {
-                    return new Date(t.createdAt).toISOString().split('T')[0] === date;
-                } catch (e) {
-                    return false;
-                }
+                const d = new Date(t.createdAt);
+                const tYear = d.getFullYear();
+                const tMonth = String(d.getMonth() + 1).padStart(2, '0');
+                const tDay = String(d.getDate()).padStart(2, '0');
+                const tDateStr = `${tYear}-${tMonth}-${tDay}`;
+                return tDateStr === date;
             });
             return {
                 date,
@@ -359,9 +409,18 @@ export default function AdminDashboard() {
         return aggregation;
     };
 
+    // Filtered Tickets for Analytics (Last 7 Days)
+    const analyticsTickets = tickets.filter(t => {
+        const d = new Date(t.createdAt);
+        const cutoff = new Date();
+        cutoff.setHours(0, 0, 0, 0);
+        cutoff.setDate(cutoff.getDate() - 6);
+        return d >= cutoff;
+    });
+
     const getTopRides = () => {
         const rideCounts: Record<string, { name: string, count: number, revenue: number }> = {};
-        tickets.forEach(t => {
+        analyticsTickets.forEach(t => {
             t.items?.forEach(item => {
                 const id = item.id || item._id;
                 if (!id) return;
@@ -549,7 +608,7 @@ export default function AdminDashboard() {
                         </div>
                         <div className="space-y-1">
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Today Revenue</p>
-                            <h3 className="text-3xl font-black text-slate-900">₹{ticketStats.revenue?.toLocaleString() || 0}</h3>
+                            <h3 className="text-3xl font-black text-slate-900">₹{(calculatedTodayStats.revenue || 0).toLocaleString()}</h3>
                         </div>
                     </div>
 
@@ -563,7 +622,7 @@ export default function AdminDashboard() {
                         </div>
                         <div className="space-y-1">
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Tickets Sold</p>
-                            <h3 className="text-3xl font-black text-slate-900">{ticketStats.total?.toLocaleString() || 0}</h3>
+                            <h3 className="text-3xl font-black text-slate-900">{(calculatedTodayStats.total || 0).toLocaleString()}</h3>
                         </div>
                     </div>
 
@@ -804,6 +863,21 @@ export default function AdminDashboard() {
                             </div>
                         )}
 
+                        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+                            <button
+                                onClick={() => setShowAllHistory(false)}
+                                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${!showAllHistory ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                            >
+                                Today
+                            </button>
+                            <button
+                                onClick={() => setShowAllHistory(true)}
+                                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${showAllHistory ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                            >
+                                History
+                            </button>
+                        </div>
+
                         <div className="flex gap-2 w-full sm:w-auto justify-end">
                             <button
                                 onClick={() => { fetchTickets(); fetchStats(); }}
@@ -973,10 +1047,10 @@ export default function AdminDashboard() {
                                             <span className="text-xs font-bold uppercase tracking-widest">Total Revenue (7 Days)</span>
                                         </div>
                                         <div className="text-4xl font-black tracking-tight text-white mb-1">
-                                            ₹{tickets.reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
+                                            ₹{analyticsTickets.reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
                                         </div>
                                         <div className="text-xs font-medium text-slate-400">
-                                            {tickets.length} total tickets processed
+                                            {analyticsTickets.length} tickets in this period
                                         </div>
                                     </div>
                                 </div>
@@ -991,14 +1065,14 @@ export default function AdminDashboard() {
                                                 <div className="w-3 h-3 rounded-full bg-amber-500"></div>
                                                 <span className="text-sm font-bold text-slate-600">Cash:</span>
                                                 <span className="text-sm font-black text-slate-900">
-                                                    ₹{tickets.filter(t => !t.paymentMode || t.paymentMode === 'cash').reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
+                                                    ₹{analyticsTickets.filter(t => !t.paymentMode || t.paymentMode === 'cash').reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-3">
                                                 <div className="w-3 h-3 rounded-full bg-blue-600"></div>
                                                 <span className="text-sm font-bold text-slate-600">UPI:</span>
                                                 <span className="text-sm font-black text-slate-900">
-                                                    ₹{tickets.filter(t => t.paymentMode === 'upi').reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
+                                                    ₹{analyticsTickets.filter(t => t.paymentMode === 'upi').reduce((sum, t) => sum + (t.amount || 0), 0).toLocaleString()}
                                                 </span>
                                             </div>
                                         </div>
@@ -1008,8 +1082,8 @@ export default function AdminDashboard() {
                                             <PieChart>
                                                 <Pie
                                                     data={[
-                                                        { name: 'Cash', value: tickets.filter(t => !t.paymentMode || t.paymentMode === 'cash').reduce((sum, t) => sum + (t.amount || 0), 0) },
-                                                        { name: 'UPI', value: tickets.filter(t => t.paymentMode === 'upi').reduce((sum, t) => sum + (t.amount || 0), 0) }
+                                                        { name: 'Cash', value: analyticsTickets.filter(t => !t.paymentMode || t.paymentMode === 'cash').reduce((sum, t) => sum + (t.amount || 0), 0) },
+                                                        { name: 'UPI', value: analyticsTickets.filter(t => t.paymentMode === 'upi').reduce((sum, t) => sum + (t.amount || 0), 0) }
                                                     ]}
                                                     cx="50%"
                                                     cy="50%"
